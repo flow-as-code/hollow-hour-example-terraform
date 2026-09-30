@@ -1,0 +1,45 @@
+# OpenTofu / Terraform working state. State lives in the S3 bucket
+# bootstrap/ creates, never here; each root's .terraform.lock.hcl is
+# committed, so an init installs only the reviewed provider builds.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# terraform.tfvars is committed on purpose: it holds an environment's
+# choices (name, Region, hours, season) and nothing secret. Anything else
+# ending in .tfvars is a local override and stays local, bootstrap/
+# terraform.tfvars (the state bucket's Region) included.
+*.tfvars
+!environments/*/terraform.tfvars
+
+# Filled-in backend configuration names the state bucket; the .example
+# beside it is what is committed.
+backend.hcl
+
+# The bootstrap root's first apply runs on local state through this
+# override (README.md, "1. The state bucket"), deleted before migrating.
+*_override.tf
+*_override.tf.json
+
+# Lambda zips archive_file writes at plan time.
+.build/
+
+# The equivalence check's dependencies.
+node_modules/
+
+# Local provider cache and scratch.
+.tofu-cache/
+.tmp/
+
+# Local env; never commit AWS credentials, account ids or instance ids.
+.env
+.env.*
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+.claude/
