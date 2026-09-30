@@ -99,10 +99,10 @@ run "files" {
   assert {
     condition = output.tfvars == {
       dev  = { environment = "dev", aws_region = "us-west-2", hours = "always_open", season = "standard" }
-      qa   = { environment = "qa", aws_region = "us-east-1", hours = "night_shift", season = "standard" }
-      prod = { environment = "prod", aws_region = "us-east-1", hours = "night_shift", season = "standard" }
+      qa   = { environment = "qa", aws_region = "us-west-2", hours = "night_shift", season = "standard" }
+      prod = { environment = "prod", aws_region = "us-west-2", hours = "night_shift", season = "standard" }
     }
-    error_message = "The committed profiles are dev us-west-2 around the clock, qa and prod us-east-1 on the night shift, all with the standard greeting."
+    error_message = "The committed profiles are all in us-west-2 (the TypeScript-first repository keeps us-east-1): dev around the clock, qa and prod on the night shift, all with the standard greeting."
   }
 
   assert {

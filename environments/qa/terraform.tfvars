@@ -5,6 +5,6 @@
 # between environments/dev, qa and prod.
 
 environment = "qa"
-aws_region  = "us-east-1"
+aws_region  = "us-west-2"
 hours       = "night_shift"
 season      = "standard"

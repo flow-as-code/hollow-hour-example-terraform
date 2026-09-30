@@ -18,12 +18,15 @@ The two deploy the same hotline, and CI proves it action by action
 Each repository deploys greenfield on its own: its own state bucket, its own
 Connect instances, nothing shared.
 
-> Status: **live in dev, qa and prod** (2026-09-30). Each environment was
-> applied greenfield from this repository, following the quickstart below:
-> 63 resources per environment, the instance included, in one plan and one
-> apply. A fresh plan of each shows no changes. The TypeScript-first
-> repository's keypad scenario (S2) passed against all three, and the
-> instance's flow logs landed in the log group this module creates. It is
+> Status: **live in dev, qa and prod, all in us-west-2** (2026-09-30). Each
+> environment was applied greenfield from this repository, following the
+> quickstart below: 63 resources per environment, the instance included, in
+> one plan and one apply. qa and prod were first applied in us-east-1 and
+> moved to us-west-2 the same day, by destroy and re-apply ("Picking other
+> Regions or another account"). A fresh plan of each shows no changes.
+> The TypeScript-first repository's keypad scenario (S2) passed against all
+> three, in us-west-2, and the instance's flow logs landed in the log group
+> this module creates. It is
 > also checked offline on every change (fmt, validate of every root,
 > `tofu test`, equivalence of content and bindings in every profile). See
 > [VERIFY.md](VERIFY.md).
@@ -119,8 +122,8 @@ fails on one.
 | Environment | Region    | Crew hours                           | Greeting |
 | ----------- | --------- | ------------------------------------ | -------- |
 | `dev`       | us-west-2 | `always_open`, around the clock      | standard |
-| `qa`        | us-east-1 | `night_shift`, 4 pm to 6 am          | standard |
-| `prod`      | us-east-1 | `night_shift`, 4 pm to 6 am          | standard |
+| `qa`        | us-west-2 | `night_shift`, 4 pm to 6 am          | standard |
+| `prod`      | us-west-2 | `night_shift`, 4 pm to 6 am          | standard |
 
 Each root under `environments/` is the same six `.tf` files and a
 `terraform.tfvars` of four values. `tests/environments.tftest.hcl` holds
@@ -131,7 +134,7 @@ the same FlowDocs.
 ```hcl
 # environments/prod/terraform.tfvars
 environment = "prod"
-aws_region  = "us-east-1"
+aws_region  = "us-west-2"
 hours       = "night_shift"
 season      = "standard"
 ```
@@ -176,20 +179,22 @@ You need:
 Node is not needed. Every command below runs from the repository root.
 
 Check the Connect instance quota first. The default is two instances per
-account and Region (`L-AA17A6B9`), and each environment creates one: dev
-one in us-west-2, qa and prod two in us-east-1, which fills the default
-there. Sharing an account with the TypeScript-first repository, which runs
-one instance per environment in the same Regions, needs 4 in us-east-1 and
-2 in us-west-2, plus any instances the account already has. The
-maintainers' account read 5 in both Regions on 2026-09-30, after an
-increase approved that day ([VERIFY.md](VERIFY.md), T6); a larger increase
-"can take up to 3 weeks".
+account and Region (`L-AA17A6B9`), and each environment creates one, all
+three in us-west-2, so this repository alone needs a quota of at least 3
+there, plus any instances the account already has in that Region. The
+TypeScript-first repository keeps its three in us-east-1, so the two never
+share a Region and can share an account without counting against each
+other. The maintainers' account read 5 in both Regions on 2026-09-30, after
+an increase approved that day ([VERIFY.md](VERIFY.md), T6). Read the quota
+and the instances already there, and if the quota is short, ask for more;
+a larger increase "can take up to 3 weeks":
 
 ```sh
 aws service-quotas get-service-quota --service-code connect \
   --quota-code L-AA17A6B9 --region us-west-2
 aws connect list-instances --region us-west-2 --query 'length(InstanceSummaryList)'
-# and again for us-east-1, which holds qa and prod
+aws service-quotas request-service-quota-increase --service-code connect \
+  --quota-code L-AA17A6B9 --desired-value <existing + 3> --region us-west-2
 ```
 
 ### 1. The state bucket
@@ -281,8 +286,27 @@ not produce (that repository builds its own from state).
   can share an account: IAM role names are global to it.
 - Changing `aws_region` on a deployed environment does not move it: the
   providers look for its resources in the new Region, find none, and plan
-  new ones, while the old ones stay behind, unmanaged. Destroy the
-  environment first (Teardown, step 1), then change the Region and apply.
+  new ones, while the old ones stay behind, unmanaged. Move it by destroy
+  and re-apply, in this order, with the tfvars still naming the old Region
+  for the first two steps:
+
+  ```sh
+  tofu -chdir=environments/qa plan -destroy -out=destroy.tfplan
+  tofu -chdir=environments/qa apply destroy.tfplan
+  # now set aws_region in environments/qa/terraform.tfvars
+  tofu -chdir=environments/qa plan -out=qa.tfplan
+  tofu -chdir=environments/qa apply qa.tfplan
+  ```
+
+  The state stays in the same bucket and key; only the resources move.
+  The new instance gets a new alias suffix, a new ARN and new flow ids, so
+  read its concurrent-calls quota again (below), and rebuild anything
+  keyed on the old ARNs, such as a simulate resource map. Observed on
+  2026-09-30, moving qa and prod from us-east-1 to us-west-2: each destroy
+  removed 63 resources, each apply added 63, a fresh plan of dev, qa and
+  prod then reported no changes, and scenario S2 passed on both
+  ([VERIFY.md](VERIFY.md), T8). Check the new Region's instance quota
+  first.
 - Never let a plan replace the instance. The greeting module versions are
   `create_before_destroy` (a new version must exist before the old one
   goes), and Terraform and OpenTofu extend that to everything a version
@@ -306,8 +330,8 @@ has the evidence, dates and AWS documentation for each. Summarized:
   day, 0:00 to 6:00 and 16:00 to 0:00.
 - **Instance count per Region** (row H3). The default quota is 2 per account
   and Region (`L-AA17A6B9`), adjustable; a larger increase "can take up to 3
-  weeks". The maintainers' account read 5 in both Regions on 2026-09-30;
-  the Quickstart has what this repository needs.
+  weeks". This repository keeps all three environments in us-west-2 and
+  needs at least 3 there; the Quickstart has the reads and the request.
 - **A pending create can be refused.** Creating an instance while another is
   still being created in the same Region was refused once with
   `ServiceQuotaExceededException: Currently pending instance creation
@@ -379,7 +403,7 @@ before anyone approves anything. `apply` runs only when the dispatch checks
 `apply`: it waits for the environment's required reviewer (prod), downloads
 the exact plan the `plan` job saved, and applies it. One deploy runs at a
 time across all three environments (one concurrency group, never
-cancelled): qa and prod share us-east-1's Connect API throttle, and a
+cancelled): dev, qa and prod share us-west-2's Connect API throttle, and a
 second instance create while one is pending can be refused.
 
 ### Setting it up

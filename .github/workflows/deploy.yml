@@ -42,8 +42,8 @@ permissions:
   contents: read
 
 # One deploy at a time across every environment, never cancelled halfway
-# through an apply: qa and prod share us-east-1 and its Connect API throttle,
-# and a second instance create while one is pending can be refused.
+# through an apply: dev, qa and prod share us-west-2 and its Connect API
+# throttle, and a second instance create while one is pending can be refused.
 concurrency:
   group: hollow-hour-example-terraform-deploy
   cancel-in-progress: false
