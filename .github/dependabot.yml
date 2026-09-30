@@ -1,0 +1,43 @@
+version: 2
+
+# Every third-party action in .github/workflows/ is pinned to a full commit
+# SHA with its version in a trailing comment; Dependabot rewrites both
+# together, so an update arrives through review and CI.
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
+#
+# The Terraform roots' providers and lock files, and the equivalence check's
+# two npm dependencies, move the same way. A provider bump may update a lock
+# file for fewer platforms than CONTRIBUTING.md, "Provider locks", requires;
+# rerun that procedure on the pull request before merging.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: terraform
+    directories:
+      - /bootstrap
+      - /environments/dev
+      - /environments/qa
+      - /environments/prod
+      - /modules/hollow-hour
+      - /tests
+      - /tools/equivalence/harness
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+    groups:
+      providers:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /tools/equivalence
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps

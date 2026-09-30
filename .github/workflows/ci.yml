@@ -1,0 +1,84 @@
+name: ci
+
+# Every check runs offline: no job has AWS credentials, and no plan here
+# reaches an account. fmt and validate cover every root; the tofu tests plan
+# the module with aws mocked and the real flowascode provider planning only;
+# the equivalence job (Node, a CI check, not a deploy step) compares the
+# module's flows with the TypeScript-first repository's.
+#
+# Every third-party action is pinned to a full commit SHA with its version
+# in a trailing comment, and Dependabot moves them (.github/dependabot.yml).
+# tests/hygiene.tftest.hcl fails on an unpinned `uses:`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt-validate:
+    name: fmt and validate (OpenTofu ${{ matrix.tofu }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor the roots declare (use_lockfile needs 1.10), and the
+        # current release.
+        tofu: ["~1.10.0", "latest"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ matrix.tofu }}
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive -diff
+      - name: Validate every root
+        run: |
+          set -euo pipefail
+          for root in bootstrap environments/dev environments/qa environments/prod tools/equivalence/harness; do
+            echo "::group::$root"
+            tofu -chdir="$root" init -backend=false -input=false -lockfile=readonly
+            tofu -chdir="$root" validate
+            echo "::endgroup::"
+          done
+
+  test:
+    name: tofu test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ~1.10.0
+          tofu_wrapper: false
+      - run: tofu -chdir=tests init -input=false -lockfile=readonly -test-directory=.
+      - run: tofu -chdir=tests test -test-directory=.
+
+  equivalence:
+    name: equivalence with the TypeScript-first flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/equivalence/package-lock.json
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ~1.10.0
+          tofu_wrapper: false
+      - run: npm ci
+        working-directory: tools/equivalence
+      - run: node check.mjs
+        working-directory: tools/equivalence
