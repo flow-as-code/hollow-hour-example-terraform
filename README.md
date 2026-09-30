@@ -18,12 +18,15 @@ The two deploy the same hotline, and CI proves it action by action
 Each repository deploys greenfield on its own: its own state bucket, its own
 Connect instances, nothing shared.
 
-> Status: built and checked offline on 2026-09-30 (fmt, validate of every
-> root, `tofu test`, equivalence of content and bindings in every profile).
-> Not yet applied to a live account. The
-> behaviors it relies on were checked live by the TypeScript-first
-> repository; [VERIFY.md](VERIFY.md) lists what this approach adds and what
-> still needs a live apply.
+> Status: **live in dev, qa and prod** (2026-09-30). Each environment was
+> applied greenfield from this repository, following the quickstart below:
+> 63 resources per environment, the instance included, in one plan and one
+> apply. A fresh plan of each shows no changes. The TypeScript-first
+> repository's keypad scenario (S2) passed against all three, and the
+> instance's flow logs landed in the log group this module creates. It is
+> also checked offline on every change (fmt, validate of every root,
+> `tofu test`, equivalence of content and bindings in every profile). See
+> [VERIFY.md](VERIFY.md).
 
 ## The hotline
 
