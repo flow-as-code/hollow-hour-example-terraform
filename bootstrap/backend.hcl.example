@@ -1,0 +1,12 @@
+# Copyright 2026 The flow-as-code Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# For the migration after the first apply, and every init after it. Copy to
+# backend.hcl (gitignored), fill in the bucket from
+# `tofu output -raw state_bucket`, then:
+#   tofu init -migrate-state -force-copy -backend-config=backend.hcl
+
+bucket       = "<state bucket>"
+key          = "hollow-hour-example-terraform/bootstrap/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true
