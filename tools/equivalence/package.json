@@ -9,8 +9,8 @@
     "check": "node check.mjs"
   },
   "dependencies": {
-    "@flow-as-code/core": "0.2.0",
-    "@flow-as-code/hcl": "0.2.0"
+    "@flow-as-code/core": "0.2.1",
+    "@flow-as-code/hcl": "0.2.1"
   },
   "engines": {
     "node": ">=22.12"

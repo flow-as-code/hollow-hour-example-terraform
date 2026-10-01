@@ -3,8 +3,10 @@
 The files in this directory are copied byte for byte from the
 TypeScript-first repository,
 [flow-as-code/hollow-hour-example-typescript](https://github.com/flow-as-code/hollow-hour-example-typescript),
-at commit `04e4995c7a9647d7631c76be75b6075567575276` (2026-09-30). Its
-`flows/` and `seasonal/` FlowDocs are unchanged since `c3a50dd`.
+at commit `db7f02a5d46f4e198b2cca2452d7511e5670691b` (2026-09-30), built
+with flow-as-code 0.2.1. Its `flows/` and `seasonal/` FlowDocs have the same
+actions as at `c3a50dd`; the move to 0.2.1 changed only `meta.generator` and
+`meta.sourceHash`, in four of them.
 
 - `flows/*.flowdoc.json` and `seasonal/*.flowdoc.json`, twelve files: the
   content `check.mjs` compares the module's flows against.

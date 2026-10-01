@@ -477,8 +477,8 @@ repository root:
 ```sh
 npm --prefix tools/equivalence ci
 node tools/equivalence/check.mjs --write .tmp/flowdocs
-npx @flow-as-code/cli@0.2.0 lint .tmp/flowdocs
-npx @flow-as-code/cli@0.2.0 studio .tmp/flowdocs
+npx @flow-as-code/cli@0.2.1 lint .tmp/flowdocs
+npx @flow-as-code/cli@0.2.1 studio .tmp/flowdocs
 ```
 
 That view is for reading. An edit in the studio does not flow back into
