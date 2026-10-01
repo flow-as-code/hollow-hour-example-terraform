@@ -16,11 +16,12 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
-    # 0.1.1 is on the Terraform and OpenTofu registries. A 0.x minor may
-    # change the schema, so the constraint stays within 0.1.
+    # 0.1.2 refuses at plan a Compare with no `next` action, which the
+    # service refuses at create. A 0.x minor may change the schema, so the
+    # constraint stays within 0.1.
     flowascode = {
       source  = "flow-as-code/flowascode"
-      version = "~> 0.1.1"
+      version = "~> 0.1.2"
     }
     # Zips lambdas/<name>/ at plan time: no build step, nothing committed.
     archive = {
