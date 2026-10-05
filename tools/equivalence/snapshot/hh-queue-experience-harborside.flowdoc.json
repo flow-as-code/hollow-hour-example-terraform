@@ -15,11 +15,11 @@
           "ComparisonValue": "$.Attributes.moved"
         },
         "Transitions": {
-          "NextAction": "poll-crews",
+          "NextAction": "pick-hold-variant",
           "Errors": [
             {
               "ErrorType": "NoMatchingCondition",
-              "NextAction": "poll-crews"
+              "NextAction": "pick-hold-variant"
             }
           ],
           "Conditions": [
@@ -33,6 +33,109 @@
               }
             }
           ]
+        }
+      },
+      {
+        "Identifier": "pick-hold-variant",
+        "Type": "DistributeByPercentage",
+        "Parameters": {},
+        "Transitions": {
+          "NextAction": "note-recorded-variant",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingCondition",
+              "NextAction": "note-recorded-variant"
+            }
+          ],
+          "Conditions": [
+            {
+              "NextAction": "note-spoken-variant",
+              "Condition": {
+                "Operator": "NumberLessThan",
+                "Operands": [
+                  "51"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "Identifier": "note-spoken-variant",
+        "Type": "UpdateContactAttributes",
+        "Parameters": {
+          "Attributes": {
+            "holdVariant": "spoken"
+          },
+          "TargetContact": "Current"
+        },
+        "Transitions": {
+          "NextAction": "tag-spoken-variant",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "poll-crews"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "tag-spoken-variant",
+        "Type": "TagContact",
+        "Parameters": {
+          "Tags": {
+            "holdVariant": "spoken"
+          }
+        },
+        "Transitions": {
+          "NextAction": "poll-crews",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "poll-crews"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "note-recorded-variant",
+        "Type": "UpdateContactAttributes",
+        "Parameters": {
+          "Attributes": {
+            "holdVariant": "recorded"
+          },
+          "TargetContact": "Current"
+        },
+        "Transitions": {
+          "NextAction": "tag-recorded-variant",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "poll-crews"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "tag-recorded-variant",
+        "Type": "TagContact",
+        "Parameters": {
+          "Tags": {
+            "holdVariant": "recorded"
+          }
+        },
+        "Transitions": {
+          "NextAction": "poll-crews",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "poll-crews"
+            }
+          ],
+          "Conditions": []
         }
       },
       {
@@ -98,7 +201,7 @@
           "Text": "The Harborside crew expects to be free in about $.External.etaMinutes minutes."
         },
         "Transitions": {
-          "NextAction": "check-sibling",
+          "NextAction": "check-eta-band",
           "Errors": [
             {
               "ErrorType": "NoMatchingError",
@@ -107,6 +210,177 @@
           ],
           "Conditions": []
         }
+      },
+      {
+        "Identifier": "check-eta-band",
+        "Type": "Compare",
+        "Parameters": {
+          "ComparisonValue": "$.External.etaBand"
+        },
+        "Transitions": {
+          "NextAction": "check-sibling",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingCondition",
+              "NextAction": "check-sibling"
+            }
+          ],
+          "Conditions": [
+            {
+              "NextAction": "offer-callback",
+              "Condition": {
+                "Operator": "Equals",
+                "Operands": [
+                  "later"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "Identifier": "offer-callback",
+        "Type": "GetParticipantInput",
+        "Parameters": {
+          "InputTimeLimitSeconds": "6",
+          "StoreInput": "False",
+          "Text": "That is a long wait. For a callback from the next crew that comes free, press 1. To keep your place in line, press 2."
+        },
+        "Transitions": {
+          "NextAction": "check-sibling",
+          "Errors": [
+            {
+              "ErrorType": "InputTimeLimitExceeded",
+              "NextAction": "check-sibling"
+            },
+            {
+              "ErrorType": "NoMatchingCondition",
+              "NextAction": "check-sibling"
+            },
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "check-sibling"
+            }
+          ],
+          "Conditions": [
+            {
+              "NextAction": "set-callback-number",
+              "Condition": {
+                "Operator": "Equals",
+                "Operands": [
+                  "1"
+                ]
+              }
+            },
+            {
+              "NextAction": "check-sibling",
+              "Condition": {
+                "Operator": "Equals",
+                "Operands": [
+                  "2"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "Identifier": "set-callback-number",
+        "Type": "UpdateContactCallbackNumber",
+        "Parameters": {
+          "CallbackNumber": "$.CustomerEndpoint.Address"
+        },
+        "Transitions": {
+          "NextAction": "create-callback",
+          "Errors": [
+            {
+              "ErrorType": "InvalidCallbackNumber",
+              "NextAction": "cannot-ring-back"
+            },
+            {
+              "ErrorType": "CallbackNumberNotDialable",
+              "NextAction": "cannot-ring-back"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "cannot-ring-back",
+        "Type": "MessageParticipant",
+        "Parameters": {
+          "Text": "We cannot ring you back at the number you are calling from, so we will keep your place in line."
+        },
+        "Transitions": {
+          "NextAction": "hold",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "hold"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "create-callback",
+        "Type": "CreateCallbackContact",
+        "Parameters": {
+          "InitialCallDelaySeconds": "60",
+          "MaximumConnectionAttempts": "2",
+          "QueueId": "${cdref:queue:dispatch-overflow}",
+          "RetryDelaySeconds": "600"
+        },
+        "Transitions": {
+          "NextAction": "callback-taken",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "callback-refused"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "callback-refused",
+        "Type": "MessageParticipant",
+        "Parameters": {
+          "Text": "We cannot take a callback right now, so we will keep your place in line."
+        },
+        "Transitions": {
+          "NextAction": "hold",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "hold"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "callback-taken",
+        "Type": "MessageParticipant",
+        "Parameters": {
+          "Text": "You are on the list. A crew will call you back as soon as one comes free. Keep the lights on until then."
+        },
+        "Transitions": {
+          "NextAction": "let-go",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "let-go"
+            }
+          ],
+          "Conditions": []
+        }
+      },
+      {
+        "Identifier": "let-go",
+        "Type": "DisconnectParticipant",
+        "Parameters": {},
+        "Transitions": {}
       },
       {
         "Identifier": "check-sibling",
@@ -301,6 +575,33 @@
       },
       {
         "Identifier": "hold",
+        "Type": "Compare",
+        "Parameters": {
+          "ComparisonValue": "$.Attributes.holdVariant"
+        },
+        "Transitions": {
+          "NextAction": "hold-spoken",
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingCondition",
+              "NextAction": "hold-spoken"
+            }
+          ],
+          "Conditions": [
+            {
+              "NextAction": "hold-recorded",
+              "Condition": {
+                "Operator": "Equals",
+                "Operands": [
+                  "recorded"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "Identifier": "hold-spoken",
         "Type": "MessageParticipantIteratively",
         "Parameters": {
           "InterruptFrequencySeconds": "30",
@@ -318,6 +619,37 @@
             {
               "ErrorType": "NoMatchingError",
               "NextAction": "settle-in"
+            }
+          ],
+          "Conditions": [
+            {
+              "NextAction": "poll-crews",
+              "Condition": {
+                "Operator": "Equals",
+                "Operands": [
+                  "MessagesInterrupted"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "Identifier": "hold-recorded",
+        "Type": "MessageParticipantIteratively",
+        "Parameters": {
+          "InterruptFrequencySeconds": "30",
+          "Messages": [
+            {
+              "PromptId": "${cdref:prompt:salt-line-tips}"
+            }
+          ]
+        },
+        "Transitions": {
+          "Errors": [
+            {
+              "ErrorType": "NoMatchingError",
+              "NextAction": "hold-spoken"
             }
           ],
           "Conditions": [
@@ -360,8 +692,24 @@
     ]
   },
   "layout": {
+    "callback-refused": {
+      "x": 2880,
+      "y": 220
+    },
+    "callback-taken": {
+      "x": 2880,
+      "y": 120
+    },
+    "cannot-ring-back": {
+      "x": 2620,
+      "y": 220
+    },
     "check-eta": {
-      "x": 540,
+      "x": 1320,
+      "y": 20
+    },
+    "check-eta-band": {
+      "x": 1840,
       "y": 20
     },
     "check-moved": {
@@ -369,52 +717,96 @@
       "y": 20
     },
     "check-sibling": {
-      "x": 1060,
+      "x": 2360,
       "y": 20
     },
+    "create-callback": {
+      "x": 2620,
+      "y": 120
+    },
     "done": {
-      "x": 2360,
+      "x": 3660,
       "y": 20
     },
     "hold": {
-      "x": 2880,
+      "x": 4180,
       "y": 20
     },
+    "hold-recorded": {
+      "x": 4440,
+      "y": 20
+    },
+    "hold-spoken": {
+      "x": 4700,
+      "y": 20
+    },
+    "let-go": {
+      "x": 3140,
+      "y": 120
+    },
     "move-to-sibling": {
-      "x": 2100,
+      "x": 3400,
       "y": 20
     },
     "moving": {
-      "x": 1840,
-      "y": 20
-    },
-    "note-move": {
-      "x": 1580,
-      "y": 20
-    },
-    "offer-move": {
-      "x": 1320,
-      "y": 20
-    },
-    "poll-crews": {
-      "x": 280,
-      "y": 20
-    },
-    "settle-in": {
       "x": 3140,
       "y": 20
     },
-    "share-eta": {
-      "x": 800,
+    "note-move": {
+      "x": 2880,
       "y": 20
     },
-    "sibling-full": {
+    "note-recorded-variant": {
+      "x": 540,
+      "y": 20
+    },
+    "note-spoken-variant": {
+      "x": 540,
+      "y": 120
+    },
+    "offer-callback": {
+      "x": 2100,
+      "y": 20
+    },
+    "offer-move": {
+      "x": 2620,
+      "y": 20
+    },
+    "pick-hold-variant": {
+      "x": 280,
+      "y": 20
+    },
+    "poll-crews": {
+      "x": 1060,
+      "y": 20
+    },
+    "set-callback-number": {
       "x": 2360,
       "y": 120
     },
-    "stay-here": {
-      "x": 2620,
+    "settle-in": {
+      "x": 4960,
       "y": 20
+    },
+    "share-eta": {
+      "x": 1580,
+      "y": 20
+    },
+    "sibling-full": {
+      "x": 3660,
+      "y": 120
+    },
+    "stay-here": {
+      "x": 3920,
+      "y": 20
+    },
+    "tag-recorded-variant": {
+      "x": 800,
+      "y": 20
+    },
+    "tag-spoken-variant": {
+      "x": 800,
+      "y": 120
     }
   },
   "refs": [
@@ -424,6 +816,16 @@
       "name": "crew-eta"
     },
     {
+      "token": "${cdref:prompt:salt-line-tips}",
+      "type": "prompt",
+      "name": "salt-line-tips"
+    },
+    {
+      "token": "${cdref:queue:dispatch-overflow}",
+      "type": "queue",
+      "name": "dispatch-overflow"
+    },
+    {
       "token": "${cdref:queue:graveyard-hill-crew}",
       "type": "queue",
       "name": "graveyard-hill-crew"
@@ -431,7 +833,7 @@
   ],
   "meta": {
     "generator": "hollow-hour-example generators/districts.ts",
-    "sourceHash": "sha256:6017c915701e13960ec33705e97c8aacb2230c34d07e5c2e5ecf5a70a6b994ed",
+    "sourceHash": "sha256:2ad2ce2b5c1ccb8c6fdd62fb30ee36755959b9d8a29029f6b9800b0d9a0fe2ad",
     "sourceKind": "ts"
   }
 }

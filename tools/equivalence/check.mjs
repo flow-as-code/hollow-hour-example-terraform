@@ -29,19 +29,20 @@
 //    wrong queue, Lambda or greeting. ARNs are unknown until apply, so the
 //    check plans a temporary copy of the module in which every refs value is
 //    rewritten to a name the plan knows: a queue's or hours profile's name,
-//    a Lambda's function_name, a flow's name, and a greeting alias as
-//    <module name>@<alias name>. Each flow's bindings must then equal the
-//    TypeScript-first repository's for the same profile
+//    a Lambda's function_name, a flow's name, the prompt's name, and a
+//    module alias as <module name>@<alias name>. Each flow's bindings must
+//    then equal the TypeScript-first repository's for the same profile
 //    (snapshot/<profile>.tfmap.json, which binds each key to a Terraform
 //    address there), with that repository's names (hh-<environment>-*)
 //    read as this one's (hh-tf-<environment>-*). A refs value the rewrite does
 //    not cover stays unknown at plan, and fails the check rather than being
 //    skipped. A key that repository's map binds and no flow uses (hours:closed,
 //    which only a scenario substitutes) must still name a resource the module
-//    plans, under the same name, so the two sets of resources stay the same;
-//    one its rules cannot name yet (prompt:salt-line-tips, until the prompt
-//    lands in both repositories) is skipped there and fails the moment a flow
-//    uses it.
+//    plans, under the same name, so the two sets of resources stay the same.
+//    An in-set module (hh-offer-callback, kind module in the snapshot) has no
+//    map entry there: its emitter binds module:<name>@<alias> to the alias it
+//    writes beside the flows, so the expected binding is <name>@<alias>, as
+//    for the greetings.
 //
 // The flows that live one per file with no for_each or dynamic block
 // (modules/hollow-hour/*.flow.tf) are read a second way too: by
@@ -54,6 +55,13 @@
 // Both sides are also checked by @flow-as-code/core: each must be a valid
 // FlowDoc (assertFlowDoc) and the planned set must lint with no blocking
 // finding.
+//
+// Both plans run against a temporary copy of the module, not the module
+// itself: awscc validates its credentials against STS as it configures, with
+// nothing to skip it (VERIFY.md, T10), so in the copy the one awscc resource,
+// the prompt, is a terraform_data stand-in carrying the same attributes
+// (STAND_IN below), and awscc is never configured. The prompt's binding is
+// still compared, by the name the module's prompts.tf declares.
 //
 // Usage: node check.mjs [--write <dir>] [--no-init]
 //   --write <dir>  also write prod's planned FlowDocs there, one
@@ -178,36 +186,63 @@ const REWRITES = [
     /\bflowascode_contact_flow_module_alias\.hh_greeting_live\[(.+?)\]\.arn\b/g,
     '"$${flowascode_contact_flow_module.hh_greeting[$1].name}@$${flowascode_contact_flow_module_alias.hh_greeting_live[$1].name}"',
   ],
+  [
+    /\bflowascode_contact_flow_module_alias\.hh_offer_callback_live\.arn\b/g,
+    '"$${flowascode_contact_flow_module.hh_offer_callback.name}@$${flowascode_contact_flow_module_alias.hh_offer_callback_live.name}"',
+  ],
   [/\b(flowascode_contact_flow\.[a-z_]+(?:\[[^\]]+\])?)\.arn\b/g, "$1.name"],
+  [/\b(awscc_connect_prompt\.[a-z_]+)\.prompt_arn\b/g, "$1.name"],
+];
+
+// The stand-in for the awscc provider's one resource (E1; VERIFY.md, T10):
+// the prompt becomes a terraform_data whose input is the same attributes,
+// so its name is the one prompts.tf declares; prompt_arn, unknown at plan
+// like the ARN, becomes the stand-in's id, and name its input's (output
+// would be unknown at plan, since the input also carries the instance ARN).
+// The prompt's binding stays in the check: REWRITES turns .prompt_arn into
+// .name first, and this turns that into the stand-in's name.
+const STAND_IN = [
+  [/resource "awscc_connect_prompt" "([a-z_]+)" \{\n([\s\S]*?)\n\}\n/g, 'resource "terraform_data" "$1" {\n  input = {\n$2\n  }\n}\n'],
+  [/\bawscc_connect_prompt\.([a-z_]+)\.prompt_arn\b/g, "terraform_data.$1.id"],
+  [/\bawscc_connect_prompt\.([a-z_]+)\.name\b/g, "terraform_data.$1.input.name"],
 ];
 
 // A copy of the module and the harness, laid out as in the repository, with
-// the refs values rewritten. It shares the harness's initialized providers
-// through TF_DATA_DIR, so it needs no second init.
-function namedCopy() {
-  const root = mkdtempSync(join(tmpdir(), "hh-bindings-"));
+// the prompt stood in for and, when named, the refs values rewritten. It
+// shares the harness's initialized providers through TF_DATA_DIR, so it
+// needs no second init.
+function moduleCopy({ named }) {
+  const root = mkdtempSync(join(tmpdir(), named ? "hh-bindings-" : "hh-content-"));
   const mod = join(root, "modules", "hollow-hour");
   const harness = join(root, "tools", "equivalence", "harness");
   cpSync(MODULE, mod, { recursive: true, filter: (src) => !/[\\/]\.(build|terraform)([\\/]|$)/.test(src) });
   mkdirSync(harness, { recursive: true });
   for (const f of ["main.tf", ".terraform.lock.hcl"]) cpSync(join(HARNESS, f), join(harness, f));
+  let stoodIn = 0;
   for (const f of readdirSync(mod).filter((f) => f.endsWith(".tf"))) {
     let text = readFileSync(join(mod, f), "utf8");
-    for (const [re, to] of REWRITES) text = text.replace(re, to);
+    if (named) for (const [re, to] of REWRITES) text = text.replace(re, to);
+    for (const [re, to] of STAND_IN) {
+      stoodIn += (text.match(re) ?? []).length;
+      text = text.replace(re, to);
+    }
     writeFileSync(join(mod, f), text);
   }
+  if (stoodIn === 0) throw new Error("STAND_IN matched nothing: the module no longer holds awscc_connect_prompt as check.mjs expects.");
   return { root, harness, env: { TF_DATA_DIR: join(HARNESS, ".terraform") } };
 }
 
 // The names the module plans for the resources a reference key can bind:
-// queues, hours profiles and Lambdas. A key no flow binds is checked against
-// these.
+// queues, hours profiles, prompts and Lambdas. A key no flow binds is
+// checked against these.
 function plannedNames(shown) {
   const out = new Set();
   const visit = (mod) => {
     for (const r of mod?.resources ?? []) {
       if (r.type === "aws_connect_queue" || r.type === "aws_connect_hours_of_operation") out.add(r.values.name);
       if (r.type === "aws_lambda_function") out.add(r.values.function_name);
+      // The prompt, as its stand-in (STAND_IN) carries it.
+      if (r.type === "terraform_data" && typeof r.values.input?.name === "string") out.add(r.values.input.name);
     }
     for (const child of mod?.child_modules ?? []) visit(child);
   };
@@ -219,7 +254,8 @@ function plannedNames(shown) {
 // Its tfmaps bind keys to Terraform addresses in its envs/<environment>/;
 // these are the names those addresses carry there (its envs/*/supporting.tf,
 // lambdas.tf and seasonal-*/greetings.tf), read with this repository's
-// prefix. flow: keys are bound by the emitter to the flow of that name.
+// prefix. flow: keys, and module:<name>@<alias> keys for a module in the
+// set, are bound by the emitter itself and have no map entry.
 function expectedBindings(profileName, environment) {
   const map = JSON.parse(readFileSync(join(SNAPSHOT, `${profileName}.tfmap.json`), "utf8"));
   const ts = `hh-${environment}`;
@@ -230,6 +266,7 @@ function expectedBindings(profileName, environment) {
     [/^aws_connect_hours_of_operation\.([a-z_]+)\.arn$/, (m) => tf(`${ts}-${m[1].replaceAll("_", "-")}`)],
     [/^aws_connect_lambda_function_association\.connect\["([^"]+)"\]\.function_arn$/, (m) => tf(`${ts}-${m[1]}`)],
     [/^data\.terraform_remote_state\.seasonal\.outputs\.greeting_([a-z]+)_live_arn$/, (m) => `hh-greeting-${m[1]}@live`],
+    [/^awscc_connect_prompt\.([a-z_]+)\.prompt_arn$/, (m) => tf(`${ts}-${m[1].replaceAll("_", "-")}`)],
   ];
   const out = {};
   for (const [key, address] of Object.entries(map)) {
@@ -239,7 +276,16 @@ function expectedBindings(profileName, environment) {
   return out;
 }
 
-function compareBindings(profileName, environment, refsByFlow, planned) {
+// The binding the emitter makes itself for a key no map holds: a flow in
+// the set by its name, a module in the set by its alias ARN.
+function inSetBinding(key, inSetModules) {
+  if (key.startsWith("flow:")) return key.slice("flow:".length);
+  const m = /^module:([^@]+)@(.+)$/.exec(key);
+  if (m && inSetModules.has(m[1])) return `${m[1]}@${m[2]}`;
+  return undefined;
+}
+
+function compareBindings(profileName, environment, refsByFlow, planned, inSetModules) {
   const want = expectedBindings(profileName, environment);
   const out = [];
   let count = 0;
@@ -254,7 +300,7 @@ function compareBindings(profileName, environment, refsByFlow, planned) {
   for (const [flow, refs] of Object.entries(refsByFlow).sort()) {
     for (const [key, got] of Object.entries(refs).sort()) {
       count++;
-      const expected = key.startsWith("flow:") ? key.slice("flow:".length) : want[key];
+      const expected = want[key] ?? inSetBinding(key, inSetModules);
       if (got === null) {
         out.push(`${profileName}: ${flow} binds ${key} to a value the plan does not know; extend REWRITES in check.mjs to name it`);
       } else if (expected === undefined) {
@@ -326,10 +372,12 @@ function main() {
   const want = snapshotFlowDocs();
   for (const [name, doc] of Object.entries(want)) assertFlowDoc(doc, `snapshot ${name}`);
   const wantNames = Object.keys(want).sort();
+  const inSetModules = new Set(Object.values(want).filter((d) => d.kind === "module" && !d.name.startsWith("hh-greeting-")).map((d) => d.name));
   const problems = [];
 
   if (init) tofu(HARNESS, ["init", "-input=false", "-no-color", "-lockfile=readonly"]);
-  const named = namedCopy();
+  const content = moduleCopy({ named: false });
+  const named = moduleCopy({ named: true });
   let prodDocs;
   let actions = 0;
   let bindings = 0;
@@ -337,7 +385,7 @@ function main() {
   try {
     for (const [profileName, profile] of Object.entries(all)) {
       // 1. Content.
-      const got = plannedFlowDocs(plan(HARNESS, profile));
+      const got = plannedFlowDocs(plan(content.harness, profile, content.env));
       if (profileName === "prod") prodDocs = got;
       for (const [name, doc] of Object.entries(got)) assertFlowDoc(doc, `planned ${name} (${profileName})`);
       const gotNames = Object.keys(got).sort();
@@ -352,11 +400,12 @@ function main() {
 
       // 2. Bindings.
       const namedPlan = plan(named.harness, profile, named.env);
-      const result = compareBindings(profileName, profile.environment, plannedRefs(namedPlan), plannedNames(namedPlan));
+      const result = compareBindings(profileName, profile.environment, plannedRefs(namedPlan), plannedNames(namedPlan), inSetModules);
       problems.push(...result.problems);
       bindings += result.count;
     }
   } finally {
+    rmSync(content.root, { recursive: true, force: true });
     rmSync(named.root, { recursive: true, force: true });
   }
 

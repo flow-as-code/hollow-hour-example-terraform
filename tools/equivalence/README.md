@@ -15,27 +15,36 @@ their committed `terraform.tfvars`, and prod-october (prod with `hours =
    and every `skip_` flag, and takes the profile as `-var` flags.
    `check.mjs` plans it once per profile (offline: resources that do not
    exist yet need no API call) and reads the `flowdoc` the flowascode
-   provider computes for every flow and module.
+   provider computes for every flow and module. It plans a temporary copy
+   of the module rather than the module itself: awscc, the prompt's
+   provider, validates its credentials against STS as it configures and
+   has no flag to skip that (VERIFY.md, T10), so in the copy the prompt is
+   a `terraform_data` stand-in with the same attributes, and awscc is
+   never configured.
 2. Each is compared with the FlowDoc of the same name in `snapshot/`,
    vendored byte for byte from the TypeScript-first repository at the
-   commit `snapshot/SOURCE.md` records: the same eighteen names, and per
+   commit `snapshot/SOURCE.md` records: the same nineteen names, and per
    document the same kind, Connect type, start action, module settings,
    references (as `${cdref:...}` tokens) and every action's Identifier,
    Type, Parameters and Transitions, in order. Descriptions and canvas
    layout are not compared.
 3. Tokens alone cannot show that a flow binds `queue:lantern-crew` to the
-   Lantern Crew's queue rather than another. So `check.mjs` plans a
-   temporary copy of the module in which every `refs` value is rewritten to
-   a name the plan knows (a queue's or hours profile's `name`, a Lambda's
-   `function_name`, a flow's `name`, a greeting alias as
+   Lantern Crew's queue rather than another. So `check.mjs` plans a second
+   copy of the module in which every `refs` value is rewritten to a name
+   the plan knows (a queue's or hours profile's `name`, a Lambda's
+   `function_name`, a flow's `name`, the prompt's `name`, a module alias as
    `<module name>@live`), and compares each flow's bindings with the
    TypeScript-first repository's `refs/<profile>.tfmap.json` for the same
    profile, its `hh-<environment>-*` names read as `hh-tf-<environment>-*`.
    A swapped queue, a swapped Lambda or a greeting fixed to one season
    fails it; so does a binding the rewrite cannot name. A key that map
    binds and no flow uses (`hours:closed`, which only a scenario
-   substitutes) must still name a queue, hours profile or Lambda the
-   module plans.
+   substitutes) must still name a queue, hours profile, prompt or Lambda
+   the module plans. A module in the set (`hh-offer-callback`) has no map
+   entry there, because that repository's emitter binds
+   `module:hh-offer-callback@live` to the alias it writes beside the
+   flows; the expected binding is `hh-offer-callback@live`, as for the
+   greetings.
 4. The single-resource `*.flow.tf` files are also read by
    `@flow-as-code/hcl`, the reader flow-cli and the studio use, and must
    give the same documents.
