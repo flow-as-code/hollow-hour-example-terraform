@@ -6,12 +6,12 @@ change after it merges there. Each task file there has a "Terraform-first"
 section with what changes here; this file lists those specifics in one
 place so a change here can be checked against them.
 
-| #   | Task          | Criteria                                                                                                                      | Status                                               |
-| --- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| T1  | First night   | [T1-first-night.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T1-first-night.md)         | live in dev, qa and prod, us-west-2 (2026-09-30)     |
-| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)             | planned 2026-10-04; not started                      |
-| T3  | Witching hour | [T3-witching-hour.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T3-witching-hour.md)     | planned 2026-10-04; after the season                 |
-| T4  | Full coverage | [T4-full-coverage.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T4-full-coverage.md)     | planned 2026-10-04; follows flow-as-code Phase D     |
+| #   | Task          | Criteria                                                                                                                  | Status                                           |
+| --- | ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| T1  | First night   | [T1-first-night.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T1-first-night.md)     | live in dev, qa and prod, us-west-2 (2026-09-30) |
+| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | planned 2026-10-04; not started                  |
+| T3  | Witching hour | [T3-witching-hour.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T3-witching-hour.md) | planned 2026-10-04; after the season             |
+| T4  | Full coverage | [T4-full-coverage.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T4-full-coverage.md) | planned 2026-10-04; follows flow-as-code Phase D |
 
 The tier decisions (phone number, Lex, agent users, prompt audio, recording
 storage, the callback queue) are in that repository's
@@ -31,8 +31,11 @@ the task file's "Where the criteria stand" with its UTC time.
      tests hold, so a broken invariant fails here as well;
    - `tools/equivalence/snapshot/` re-vendored at the merge commit, recorded
      in `snapshot/SOURCE.md`, and `check.mjs` green for every profile.
-3. Live: dev, qa and prod in us-west-2, resource names `hh-tf-<env>-*`, a
-   saved plan then apply, then a fresh plan that shows "No changes".
+3. Live, once per tier, at the mirror of the tier's Close PR: dev, qa and
+   prod in us-west-2, resource names `hh-tf-<env>-*`, a saved plan then
+   apply, then a fresh plan that shows "No changes". Every other mirrored
+   PR ends at `tofu test` and the equivalence check; the TypeScript-first
+   plan's drift and scenario evidence is written for one apply per tier.
 
 ## T2: full moon
 
@@ -47,22 +50,46 @@ the task file's "Where the criteria stand" with its UTC time.
   `hh-district-menu.tf` (the address Compare). New `prompts.tf`: a private
   bucket, the committed audio as an object, and `awscc_connect_prompt`.
 - **Providers**: `versions.tf` gains `hashicorp/awscc`;
-  `environments/*/providers.tf` configure it with the same Region and
-  default tags as aws.
+  `environments/*/providers.tf` configure it with `region` only. awscc has
+  no `default_tags`, `skip_credentials_validation` or
+  `skip_requesting_account_id` (only `skip_metadata_api_check`), so
+  `awscc_connect_prompt` carries the module's two tags itself as `tags`, a
+  set of `{key, value}` objects, and a tftest run holds them equal to the
+  aws `default_tags`. `tests/versions.tf` and
+  `tools/equivalence/harness/main.tf` declare awscc as well, because
+  `mock_provider` and the harness need it declared. The awscc package is
+  hundreds of megabytes, and the fmt-validate matrix inits five roots per
+  OpenTofu version, then `tofu test` and the harness init again, each
+  under a 20-minute timeout, so the mirror of T2 PR 7 caches the plugin
+  directory in CI (`actions/cache` keyed on the lock files, pinned to a
+  commit SHA like every other action).
 - **tftest runs**: a `mock_provider "awscc"` with a `prompt_arn` default;
   new runs `dead_line`, `holds`, `prank_screen`, `callbacks` and `hold_ab`.
   `environments.tftest.hcl` still shows the roots differ only in their
   `terraform.tfvars`.
-- **Equivalence**: a snapshot bump per mirrored PR; `expectedBindings` and
-  the refs rewrite in `check.mjs` learn the `awscc_connect_prompt` name.
-- **Risk E1**: the harness plans offline with placeholder credentials and
-  every `skip_` flag. awscc works through Cloud Control and may not plan
-  that way. The mirror of T2 PR 7 (the first awscc resource) answers E1
-  before it merges and records it in `VERIFY.md`; the fallback is an
+- **Equivalence**: a snapshot bump per mirrored PR; `REWRITES` in
+  `check.mjs` learns `awscc_connect_prompt.X.prompt_arn` to `.name` and
+  `expectedBindings` the same address, and both learn the unaliased in-set
+  module form, `flowascode_contact_flow_module.X.arn` to `.name`, for
+  `module:hh-offer-callback` (bound without a version or alias, as the
+  TypeScript-first T2 records); today's rules cover only the greeting alias
+  and `flowascode_contact_flow.X.arn`.
+- **Risk E1**, as rewritten 2026-10-05: with an awscc provider block
+  carrying placeholder `access_key` and `secret_key`, `region` and
+  `skip_metadata_api_check`, does `tofu plan` of a new
+  `awscc_connect_prompt` make a Cloud Control call? The aws and flowascode
+  `skip_` configuration cannot be reused, since awscc has none of it. The
+  mirror of T2 PR 7 (the first awscc resource) answers E1 before it merges
+  and records it in `VERIFY.md` as `harness-checked`; the fallback is an
   override in `harness/` that stands in for the awscc resources without
   skipping the prompt's binding check.
 - **Recording storage**: if an instance has no CALL_RECORDINGS storage
-  config, it is added in `instance.tf`.
+  config, it is added in `instance.tf`: S3 with SSE-S3, no customer KMS
+  key, a lifecycle rule that expires recordings (tier decision 5).
+- **Closed hours**: `hours:closed`, an `aws_connect_hours_of_operation`
+  open for one minute a week (the provider requires one `config` block),
+  mirrored in `hours.tf` and bound in every profile's map, for S4's
+  substitution (TypeScript-first VERIFY HC1).
 
 ## T3: witching hour
 
@@ -87,9 +114,23 @@ the task file's "Where the criteria stand" with its UTC time.
 - Most new resources are awscc-only (task templates, Cases, the AI agents
   assistant, predefined attributes, user proficiencies, integration
   associations), so E1 must be settled first.
-- The provider floor in `versions.tf` rises with each provider release that
-  vendors the conformance the npm release uses; FlowDoc 0.3 (flow-as-code
-  D01) needs the provider that reads it before any root plans a 0.3
-  document.
+- The provider floor in `modules/hollow-hour/versions.tf` (`~> 0.1.2`,
+  whose comment keeps the constraint within 0.1 on purpose) is widened past
+  `~> 0.1` in the same PR that first uses a Phase D typed block or ref key.
+  Until then nothing here depends on FlowDoc 0.3: the roots plan HCL, not
+  documents, and the provider computes the `flowdoc` field with its own
+  version constant, so a document version never crosses to it. What an
+  older provider refuses at validate is a typed sub-block or a ref-type key
+  its catalog lacks. (Rewritten 2026-10-05; the earlier bullet named a gate
+  that cannot trip.)
+- `tools/equivalence/check.mjs` compares kind, type, start action,
+  settings, refs and actions but not `flowdoc`, so a 0.3 snapshot beside a
+  provider still writing 0.2 passes silently; the snapshot bump at T4 adds
+  a `flowdoc` version comparison (or records why it stays excluded) so a
+  reader-writer mismatch is visible.
+- tftest runs and `check.mjs`'s refs rewrite learn each new reference type
+  by flow-as-code D01's token name: `tasktemplate`, `casetemplate`,
+  `casefield` (also as a `CaseRequestFields` map key, ADR 0008's default
+  form), `assistant` and `phonenumber`.
 - One supporting file per capability (`profiles.tf`, `cases.tf`,
   `tasks.tf`, `assist.tf`, `streaming.tf`) and one `*.flow.tf` per new flow.
