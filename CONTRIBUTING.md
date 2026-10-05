@@ -43,8 +43,13 @@ tofu -chdir=tests test -test-directory=.
 npm --prefix tools/equivalence ci && node tools/equivalence/check.mjs
 ```
 
-None of them calls AWS. The first init downloads the aws, archive, random
-and flowascode providers from the OpenTofu registry.
+None of them calls AWS. The first init downloads the aws, archive, random,
+awscc and flowascode providers from the OpenTofu registry. The awscc package
+(the prompt's provider, `modules/hollow-hour/prompts.tf`) is hundreds of
+megabytes per platform and five roots declare it, so set
+`TF_PLUGIN_CACHE_DIR` to a directory such as `.tofu-cache/` (gitignored)
+before the first init and every root shares one download; CI does the same
+and keeps that directory between runs.
 
 ## Provider locks
 
@@ -59,6 +64,13 @@ for root in bootstrap environments/dev environments/qa environments/prod tests t
     -platform=linux_amd64 -platform=linux_arm64
 done
 ```
+
+`tofu providers lock` needs the root initialized first (`tofu init
+-backend=false`), downloads each provider once per platform and ignores the
+plugin cache, so awscc alone is four downloads per root. The hashes a
+provider version has are the same in every lock file, so one root's
+re-lock can be copied into the others' lock files; `tofu init
+-lockfile=readonly` in each root then confirms it.
 
 These are OpenTofu registry locks (`registry.opentofu.org`). With Terraform,
 run `terraform providers lock` with the same platforms for its own
