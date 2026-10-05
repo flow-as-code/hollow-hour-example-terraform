@@ -13,10 +13,11 @@
 # queue cap per environment; every flow and module carries the tags; the
 # flow log group is optional; the closed hours and the recording storage
 # have the settled shape; the variables refuse a broken overflow and values
-# AWS would refuse at apply. The Tier 2 runs (dead_line, holds, hooks,
-# prank_screen, callback_number) hold the invariants the TypeScript-first
-# repository's tests/flows.test.ts holds, on the walks fixtures/walks
-# computes. tests/environments.tftest.hcl compares the profiles.
+# AWS would refuse at apply; the prompt's bucket, object and tags. The Tier 2
+# runs (dead_line, holds, hooks, prank_screen, callback_number, callbacks,
+# hold_ab) hold the invariants the TypeScript-first repository's
+# tests/flows.test.ts holds, on the walks fixtures/walks computes.
+# tests/environments.tftest.hcl compares the profiles.
 
 mock_provider "aws" {
   # Shapes the aws provider validates: an IAM policy that parses and ARNs
@@ -36,6 +37,14 @@ mock_provider "aws" {
   }
   mock_resource "aws_cloudwatch_log_group" {
     defaults = { arn = "arn:aws:logs:us-east-1:000000000000:log-group:mock" }
+  }
+}
+
+# awscc is mocked too: the prompt is never created, and the queue flows bind
+# prompt:salt-line-tips to the ARN shape a prompt carries.
+mock_provider "awscc" {
+  mock_resource "awscc_connect_prompt" {
+    defaults = { prompt_arn = "arn:aws:connect:us-east-1:000000000000:instance/00000000-0000-0000-0000-000000000000/prompt/00000000-0000-0000-0000-000000000000" }
   }
 }
 
@@ -77,11 +86,12 @@ run "prod" {
       "hh-greeting-halloween",
       "hh-greeting-standard",
       "hh-hotline-main",
+      "hh-offer-callback",
       "hh-queue-experience-graveyard-hill",
       "hh-queue-experience-harborside",
       "hh-queue-experience-old-town",
     ])
-    error_message = "The module deploys the ten Tier 1 flows, the six Tier 2 flows and the two greeting modules, named as in the TypeScript-first repository."
+    error_message = "The module deploys the ten Tier 1 flows, the six Tier 2 flows, the callback module and the two greeting modules, named as in the TypeScript-first repository."
   }
 
   assert {
@@ -99,8 +109,8 @@ run "prod" {
       for name, doc in output.flowdocs : [
         for a in jsondecode(doc).content.Actions : a if a.Type == "Compare"
       ]
-    ])) == 8
-    error_message = "Expected eight Compares (check-caller, check-plane, check-injured-first, check-verdict, check-grade, and check-moved per district); the Compare check above would pass vacuously on none."
+    ])) == 14
+    error_message = "Expected fourteen Compares (check-caller, check-plane, check-injured-first, check-verdict, check-grade, and check-moved, check-eta-band and hold per district); the Compare check above would pass vacuously on none."
   }
 
   assert {
@@ -162,8 +172,49 @@ run "prod" {
         values(flowascode_contact_flow.hh_queue_experience),
       ) : f.tags == tomap({ "hollow-hour-example-terraform" = "true", "environment" = "prod" })],
       [for m in values(flowascode_contact_flow_module.hh_greeting) : m.tags == tomap({ "hollow-hour-example-terraform" = "true", "environment" = "prod" })],
+      [flowascode_contact_flow_module.hh_offer_callback.tags == tomap({ "hollow-hour-example-terraform" = "true", "environment" = "prod" })],
     ))
     error_message = "Every flow and module carries the hollow-hour-example-terraform and environment tags."
+  }
+
+  # awscc has no default_tags, so the prompt carries the same two tags
+  # itself, as a set of {key, value} objects.
+  assert {
+    condition     = tomap({ for t in awscc_connect_prompt.salt_line_tips.tags : t.key => t.value }) == tomap({ "hollow-hour-example-terraform" = "true", "environment" = "prod" })
+    error_message = "The prompt's tags are not exactly the two tags the aws provider puts on everything else."
+  }
+
+  # The recorded prompt (prompts.tf): a private SSE-S3 bucket with no
+  # policy, the committed wav as its one object under a key that carries the
+  # file's MD5, and the Connect prompt made from that object on this
+  # instance, named hh-tf-<environment>-salt-line-tips.
+  assert {
+    condition = (
+      startswith(aws_s3_bucket.prompts.bucket, "hh-tf-prod-prompts-") &&
+      tolist(tolist(aws_s3_bucket_server_side_encryption_configuration.prompts.rule)[0].apply_server_side_encryption_by_default)[0].sse_algorithm == "AES256" &&
+      aws_s3_bucket_public_access_block.prompts.block_public_acls && aws_s3_bucket_public_access_block.prompts.block_public_policy &&
+      aws_s3_bucket_public_access_block.prompts.ignore_public_acls && aws_s3_bucket_public_access_block.prompts.restrict_public_buckets &&
+      tolist(aws_s3_bucket_ownership_controls.prompts.rule)[0].object_ownership == "BucketOwnerEnforced" &&
+      aws_s3_object.salt_line_tips.key == "salt-line-tips-${filemd5("../modules/hollow-hour/prompts/salt-line-tips.wav")}.wav" &&
+      aws_s3_object.salt_line_tips.source_hash == filemd5("../modules/hollow-hour/prompts/salt-line-tips.wav") &&
+      aws_s3_object.salt_line_tips.content_type == "audio/wav" &&
+      awscc_connect_prompt.salt_line_tips.name == "hh-tf-prod-salt-line-tips" &&
+      awscc_connect_prompt.salt_line_tips.instance_arn == aws_connect_instance.this.arn &&
+      awscc_connect_prompt.salt_line_tips.s3_uri == "s3://${aws_s3_object.salt_line_tips.bucket}/${aws_s3_object.salt_line_tips.key}"
+    )
+    error_message = "The prompt audio lives in a private SSE-S3 bucket named hh-tf-<environment>-prompts-<suffix>, as one object keyed on the wav's MD5, and the prompt is made from that object on this instance."
+  }
+
+  # The committed audio is a RIFF wav (the shape Connect recommends for a
+  # prompt; the TypeScript-first repository's VERIFY.md, P1) with the copy
+  # it was synthesized from beside it, and it is the object's source.
+  assert {
+    condition = (
+      endswith(aws_s3_object.salt_line_tips.source, "/prompts/salt-line-tips.wav") &&
+      startswith(filebase64("../modules/hollow-hour/prompts/salt-line-tips.wav"), "UklGR") &&
+      length(file("../modules/hollow-hour/prompts/salt-line-tips.txt")) > 40
+    )
+    error_message = "The object's source is not prompts/salt-line-tips.wav, the wav is not RIFF, or prompts/salt-line-tips.txt (the copy it was synthesized from) is missing."
   }
 
   assert {
@@ -481,8 +532,14 @@ run "callback_number" {
   }
 
   assert {
-    condition     = contains([for s in output.callback_setters : "${s.flow}#${s.id}"], "hh-dead-line#set-callback-number")
-    error_message = "The dead line sets the callback number; the checks below would pass vacuously on none."
+    condition = toset([for s in output.callback_setters : "${s.flow}#${s.id}"]) == toset([
+      "hh-dead-line#set-callback-number",
+      "hh-offer-callback#set-callback-number",
+      "hh-queue-experience-graveyard-hill#set-callback-number",
+      "hh-queue-experience-harborside#set-callback-number",
+      "hh-queue-experience-old-town#set-callback-number",
+    ])
+    error_message = "The callback number is set in the dead line, the callback module and each queue flow, and nowhere else; the checks below would pass vacuously on none."
   }
 
   assert {
@@ -496,6 +553,188 @@ run "callback_number" {
       output.types["hh-dead-line"]["cannot-ring-back"] == "MessageParticipant"
     )
     error_message = "In the dead line both callback-number errors go to cannot-ring-back, which rejoins the flow."
+  }
+}
+
+# Callbacks (tier decision 6; the TypeScript-first repository's VERIFY.md
+# 16.2, 16.12, CB1): every CreateCallbackContact names queue:dispatch-overflow
+# explicitly, never a crew queue and never the current queue by omission,
+# with static counts; none, and no invoke of the callback module, is
+# reachable from lines-busy; the module's shape; the district offer after
+# hours and at overflow-full through the live alias, with a sign-off before
+# the hang-up and lines-busy left plain; the queue flow's inline callback,
+# errors back to the hold, ending in DisconnectParticipant.
+run "callbacks" {
+  command = plan
+
+  module {
+    source = "./fixtures/walks"
+  }
+
+  assert {
+    condition     = output.converged
+    error_message = "A walk did not settle within 128 steps; fixtures/reach needs another doubling."
+  }
+
+  assert {
+    condition = toset([for c in output.callbacks : "${c.flow}#${c.id}"]) == toset([
+      "hh-offer-callback#create-callback",
+      "hh-queue-experience-graveyard-hill#create-callback",
+      "hh-queue-experience-harborside#create-callback",
+      "hh-queue-experience-old-town#create-callback",
+    ])
+    error_message = "Callbacks are created in the module and once per queue flow, and nowhere else; the checks below would pass vacuously on none."
+  }
+
+  assert {
+    condition     = alltrue([for c in output.callbacks : c.queue == "$${cdref:queue:dispatch-overflow}"])
+    error_message = "A CreateCallbackContact names no queue (the contact's current queue, a crew queue at its cap) or a queue other than queue:dispatch-overflow (tier decision 6)."
+  }
+
+  assert {
+    condition     = alltrue([for c in output.callbacks : alltrue([for n in c.counts : can(regex("^[1-9][0-9]*$", n))])])
+    error_message = "A CreateCallbackContact's delay or attempt count is not a static positive integer (VERIFY 16.2: delays and attempts must be static)."
+  }
+
+  # Nothing reachable from lines-busy creates a callback or invokes the
+  # module: that branch is taken exactly when dispatch-overflow is full.
+  assert {
+    condition = alltrue(flatten([
+      for name, reach in output.reach.from_lines_busy : [
+        for id in reach : !contains(["CreateCallbackContact", "InvokeFlowModule"], output.types[name][id])
+      ]
+    ]))
+    error_message = "A callback is offered from lines-busy, where dispatch-overflow is full and the create would take its error branch."
+  }
+
+  assert {
+    condition     = length(output.callback_invokes) == 3 && alltrue([for i in output.callback_invokes : startswith(i.flow, "hh-district-") && i.id == "take-callback"])
+    error_message = "The callback module is invoked by take-callback in each of the three district flows and nowhere else (both offers in a district flow share that one invoke)."
+  }
+
+  assert {
+    condition = (
+      output.offer_module.kind == "module" && output.offer_module.type == "MODULE" &&
+      output.offer_module.start == "set-callback-number" &&
+      output.offer_module.number_next == "create-callback" &&
+      output.offer_module.create_next == "callback-taken" &&
+      output.offer_module.create_errors == { NoMatchingError = "callback-refused" } &&
+      alltrue([for id, next in output.offer_module.message_nexts : next == "done"]) &&
+      output.offer_module.done_type == "EndFlowModuleExecution" &&
+      strcontains(output.offer_module.texts["callback-refused"], "We cannot take a callback right now") &&
+      strcontains(output.offer_module.texts["callback-taken"], "as soon as one comes free") &&
+      !strcontains(join(" ", values(output.offer_module.texts)), "night shift")
+    )
+    error_message = "hh-offer-callback is the number, the create with its own copy for a refused create, shift-neutral copy (it runs at overflow-full mid-shift too), and every message ending the module."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, o in output.district_offers :
+      o.overflow_full_target == "overflow-full" && o.overflow_full_next == "offer-callback" &&
+      o.after_hours_next == "offer-callback" &&
+      o.offer_keys == { "1" = "take-callback", "2" = "sign-off" } &&
+      tolist(o.offer_default) == tolist(["sign-off"]) &&
+      tolist(o.offer_errors) == tolist(["InputTimeLimitExceeded", "NoMatchingCondition", "NoMatchingError"]) &&
+      o.take_type == "InvokeFlowModule" && o.take_module == "$${cdref:module:hh-offer-callback@live}" && o.take_next == "hang-up" &&
+      o.sign_off_type == "MessageParticipant" && o.sign_off_next == "hang-up" &&
+      o.lines_busy_target == "lines-busy" && o.lines_busy_next == "hang-up"
+    ]) && length(output.district_offers) == 3
+    error_message = "A district flow does not offer the callback at overflow-full and after hours through module:hh-offer-callback@live, sign off every decline before the hang-up, and keep lines-busy a plain message."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, q in output.queue_callbacks :
+      q.share_eta_next == "check-eta-band" && q.band_value == "$.External.etaBand" &&
+      tolist(q.band_later) == tolist(["offer-callback"]) && q.band_next == "check-sibling" &&
+      q.offer_keys == { "1" = "set-callback-number", "2" = "check-sibling" } && tolist(q.offer_default) == tolist(["check-sibling"]) &&
+      q.number_next == "create-callback" && tolist(q.number_targets) == tolist(["cannot-ring-back"]) && q.cannot_next == "hold" &&
+      q.create_errors == { NoMatchingError = "callback-refused" } && q.refused_next == "hold" &&
+      q.taken_next == "let-go" && q.let_go_type == "DisconnectParticipant"
+    ]) && length(output.queue_callbacks) == 3
+    error_message = "A queue flow does not offer the inline callback on a long wait, send its errors back to the hold, and end a taken callback with let-go."
+  }
+
+  # From the create's success branch the only terminal is a disconnect: a
+  # flow that merely ended would leave the caller both queued and holding a
+  # callback.
+  assert {
+    condition     = alltrue([for name, q in output.queue_callbacks : tolist(q.path_ends) == tolist(["DisconnectParticipant"])])
+    error_message = "A queue flow's callback path reaches EndFlowExecution, or no terminal at all; it must end the call with DisconnectParticipant."
+  }
+}
+
+# The hold A/B split (the TypeScript-first repository's VERIFY.md, DP1):
+# every DistributeByPercentage covers 1 to 100 by its shape, ascending
+# NumberLessThan thresholds at most 100 with a mirrored remainder, so its
+# shares sum to 100; this one is 50/50, once per queue flow, on entry; each
+# side records and tags holdVariant; hold is a Compare that plays the prompt
+# for recorded and the spoken tips otherwise; the prompt reference is used
+# in the recorded variant and nowhere else.
+run "hold_ab" {
+  command = plan
+
+  module {
+    source = "./fixtures/walks"
+  }
+
+  assert {
+    condition = toset([for s in output.splits : "${s.flow}#${s.id}"]) == toset([
+      "hh-queue-experience-graveyard-hill#pick-hold-variant",
+      "hh-queue-experience-harborside#pick-hold-variant",
+      "hh-queue-experience-old-town#pick-hold-variant",
+    ])
+    error_message = "The split runs once in each queue flow and nowhere else; the checks below would pass vacuously on none."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in output.splits :
+      alltrue([for o in s.operators : o == "NumberLessThan"]) &&
+      alltrue([for i, t in s.thresholds : t > (i == 0 ? 1 : s.thresholds[i - 1]) && t <= 100 && floor(t) == t]) &&
+      length(s.remainder) == 1 && s.next == s.remainder[0] &&
+      sum(s.shares) == 100 && alltrue([for p in s.shares : p >= 1])
+    ])
+    error_message = "A DistributeByPercentage is not ascending NumberLessThan thresholds at most 100 with a remainder branch that next mirrors: its shares would not cover 1 to 100 once each."
+  }
+
+  assert {
+    condition     = alltrue([for s in output.splits : tolist(s.shares) == tolist([50, 50]) && tolist(s.targets) == tolist(["note-spoken-variant"]) && tolist(s.remainder) == tolist(["note-recorded-variant"])])
+    error_message = "The hold split is not 50/50: NumberLessThan 51 to the spoken side and the remainder to the recorded side."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, h in output.hold_ab :
+      h.check_moved_next == "pick-hold-variant" && h.split_next == "note-recorded-variant" &&
+      alltrue([for v in ["spoken", "recorded"] : h.notes[v].type == "UpdateContactAttributes" && h.notes[v].attrs == { holdVariant = v } && h.notes[v].next == "tag-${v}-variant"]) &&
+      alltrue([for v in ["spoken", "recorded"] : h.tags[v].type == "TagContact" && h.tags[v].tags == { holdVariant = v } && h.tags[v].next == "poll-crews"])
+    ]) && length(output.hold_ab) == 3
+    error_message = "A queue flow does not split on entry, or a side does not record holdVariant as an attribute and tag it before the poll."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, h in output.hold_ab :
+      h.hold_type == "Compare" && h.hold_value == "$.Attributes.holdVariant" &&
+      h.hold_conditions == { recorded = "hold-recorded" } && h.hold_next == "hold-spoken" &&
+      h.recorded_type == "MessageParticipantIteratively" && jsonencode(h.recorded_messages) == jsonencode([{ PromptId = "$${cdref:prompt:salt-line-tips}" }]) &&
+      h.spoken_type == "MessageParticipantIteratively" && h.spoken_all_text &&
+      h.recorded_interrupt == "30" && h.spoken_interrupt == "30" &&
+      tolist(h.recorded_resume) == tolist(["poll-crews"]) && tolist(h.spoken_resume) == tolist(["poll-crews"]) &&
+      tolist(h.recorded_errors) == tolist(["hold-spoken"]) && tolist(h.spoken_errors) == tolist(["settle-in"])
+    ])
+    error_message = "hold is not a Compare on holdVariant that plays prompt:salt-line-tips for recorded (falling back to the spoken tips) and the spoken tips otherwise, both interruptible every 30 s back to the poll."
+  }
+
+  assert {
+    condition = output.prompt_refs == {
+      "hh-queue-experience-graveyard-hill" = ["$${cdref:prompt:salt-line-tips}"]
+      "hh-queue-experience-harborside"     = ["$${cdref:prompt:salt-line-tips}"]
+      "hh-queue-experience-old-town"       = ["$${cdref:prompt:salt-line-tips}"]
+    }
+    error_message = "The prompt reference is used somewhere other than the recorded hold variant of each queue flow, or not there."
   }
 }
 
@@ -615,7 +854,7 @@ run "four_districts" {
   }
 
   assert {
-    condition     = length(output.flowdocs) == 20 && length(aws_connect_queue.crew) == 4
+    condition     = length(output.flowdocs) == 21 && length(aws_connect_queue.crew) == 4
     error_message = "A fourth district adds one crew queue, one district flow and one queue-experience flow."
   }
 

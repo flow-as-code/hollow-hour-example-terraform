@@ -28,6 +28,13 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.7"
     }
+    # Cloud Control, for the one resource hashicorp/aws has no type for: the
+    # Connect prompt (prompts.tf). The package is hundreds of megabytes,
+    # which is why CI caches the plugin directory (CONTRIBUTING.md).
+    awscc = {
+      source  = "hashicorp/awscc"
+      version = "~> 1.104"
+    }
     # The instance alias suffix: aliases are unique across every account.
     random = {
       source  = "hashicorp/random"

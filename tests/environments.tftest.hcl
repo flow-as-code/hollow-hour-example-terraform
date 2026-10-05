@@ -36,6 +36,12 @@ mock_provider "aws" {
   }
 }
 
+mock_provider "awscc" {
+  mock_resource "awscc_connect_prompt" {
+    defaults = { prompt_arn = "arn:aws:connect:us-east-1:000000000000:instance/00000000-0000-0000-0000-000000000000/prompt/00000000-0000-0000-0000-000000000000" }
+  }
+}
+
 provider "flowascode" {
   region                      = "us-east-1"
   access_key                  = "offline"
@@ -131,8 +137,8 @@ run "content" {
   }
 
   assert {
-    condition     = length(output.flowdocs["prod"]) == 18
-    error_message = "Each profile deploys eighteen flows and modules."
+    condition     = length(output.flowdocs["prod"]) == 19
+    error_message = "Each profile deploys nineteen flows and modules."
   }
 }
 

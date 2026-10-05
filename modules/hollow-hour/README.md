@@ -26,8 +26,11 @@ a short slug or starts `tfacc`.
 
 Outputs: `instance_id`, `instance_arn`, `instance_alias`, `flow_log_group_name`, `season`,
 `district_hours`, `lambda_function_names`, `flow_names`, `recording_bucket`,
-`greeting_live_arns`, and, for the tests and the equivalence check,
-`flow_refs` and `flowdocs`.
+`prompt_bucket`, `greeting_live_arns`, `offer_callback_live_arn`, and, for
+the tests and the equivalence check, `flow_refs` and `flowdocs`.
 
-It configures no provider. The caller configures `aws` and `flowascode`
-for one Region; `archive` and `random` need no configuration.
+It configures no provider. The caller configures `aws`, `flowascode` and
+`awscc` (the prompt in `prompts.tf`; `region` only, since awscc has no
+`default_tags`, and the prompt tags itself) for one Region; `archive` and
+`random` need no configuration. `prompts/salt-line-tips.wav` and its
+`.txt` are the TypeScript-first repository's files, byte for byte.

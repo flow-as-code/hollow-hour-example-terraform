@@ -9,6 +9,11 @@ name: ci
 # Every third-party action is pinned to a full commit SHA with its version
 # in a trailing comment, and Dependabot moves them (.github/dependabot.yml).
 # tests/hygiene.tftest.hcl fails on an unpinned `uses:`.
+#
+# The awscc package (the prompt's provider) is hundreds of megabytes, and
+# each job inits several roots, so every job keeps the plugin directory
+# between runs (actions/cache keyed on the lock files, which pin every
+# build) and points every init at it through TF_PLUGIN_CACHE_DIR.
 
 on:
   push:
@@ -21,6 +26,9 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tofu-cache
 
 jobs:
   fmt-validate:
@@ -39,6 +47,12 @@ jobs:
         with:
           tofu_version: ${{ matrix.tofu }}
           tofu_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tofu-cache
+          key: tofu-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+      # The cache directory must exist before an init can fill it.
+      - run: mkdir -p .tofu-cache
       - run: tofu fmt -check -recursive -diff
       - name: Validate every root
         run: |
@@ -60,6 +74,12 @@ jobs:
         with:
           tofu_version: ~1.10.0
           tofu_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tofu-cache
+          key: tofu-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+      # The cache directory must exist before an init can fill it.
+      - run: mkdir -p .tofu-cache
       - run: tofu -chdir=tests init -input=false -lockfile=readonly -test-directory=.
       - run: tofu -chdir=tests test -test-directory=.
 
@@ -78,6 +98,12 @@ jobs:
         with:
           tofu_version: ~1.10.0
           tofu_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tofu-cache
+          key: tofu-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+      # The cache directory must exist before an init can fill it.
+      - run: mkdir -p .tofu-cache
       - run: npm ci
         working-directory: tools/equivalence
       - run: node check.mjs

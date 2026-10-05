@@ -9,7 +9,9 @@
 # yet makes no API call, and the module reads no data source that would.
 #
 # check.mjs plans it once per deploy profile (dev, qa, prod, prod-october),
-# passing each profile's values as -var flags. The defaults are prod's.
+# passing each profile's values as -var flags, against a temporary copy of
+# the module laid out as in the repository (check.mjs, `moduleCopy`), not
+# the module itself, because of awscc (below). The defaults are prod's.
 
 terraform {
   required_version = ">= 1.10.0"
@@ -26,6 +28,10 @@ terraform {
     archive = {
       source  = "hashicorp/archive"
       version = "~> 2.7"
+    }
+    awscc = {
+      source  = "hashicorp/awscc"
+      version = "~> 1.104"
     }
     random = {
       source  = "hashicorp/random"
@@ -51,6 +57,21 @@ provider "flowascode" {
   skip_credentials_validation = true
   skip_requesting_account_id  = true
 }
+
+# awscc is declared because the module requires it, and configured by
+# nothing here. It has no skip_credentials_validation or
+# skip_requesting_account_id, and with a provider block carrying placeholder
+# keys, region and skip_metadata_api_check it failed as it configured,
+# before any resource was planned: "validating provider credentials:
+# retrieving caller identity from STS: operation error STS:
+# GetCallerIdentity ... api error InvalidClientTokenId" (risk E1,
+# tasks/README.md; VERIFY.md, row T10, 2026-10-05). So in the copy
+# check.mjs plans, the module's one awscc resource, the prompt
+# (modules/hollow-hour/prompts.tf), is a terraform_data stand-in carrying
+# the same attributes, every reference to it rewritten (check.mjs,
+# `STAND_IN`): the copy holds no awscc resource, so awscc is never
+# configured, and the prompt's binding is still compared by the name the
+# module declares.
 
 variable "environment" {
   type    = string

@@ -5,8 +5,10 @@
 # safety question, the plane check (a departed caller goes to hh-dead-line,
 # and only after the safety question), the six-question keypad interview,
 # the prank screen (never for a caller who said someone is hurt), the grade,
-# and then the Lantern Crew (Hostile, Chorus) or the district menu (every
-# other grade). Wherever the whispers are hooked, the holds are hooked too.
+# the work order (UpdateContactData, named statically and described by the
+# advice), and then the Lantern Crew (Hostile, Chorus) or the district menu
+# (every other grade). Wherever the whispers are hooked, the holds are
+# hooked too.
 #
 # check-caller, check-plane, check-injured-first, check-verdict and
 # check-grade are Compares, and each carries next: Connect refuses a Compare
@@ -830,7 +832,7 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
 
   action {
     id   = "record-grade"
-    next = "share-advice"
+    next = "open-work-order"
     update_contact_attributes {
       attributes = {
         advice    = "$.External.advice"
@@ -842,6 +844,23 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     error {
       type = "NoMatchingError"
       next = "note-ungraded"
+    }
+  }
+
+  # Every graded call becomes a work order a crew can find in contact search
+  # by its static name, with the advice as its description (VERIFY.md, D1).
+  # The catch-all goes on to the advice: a refused update never costs the
+  # caller what they were told.
+  action {
+    id   = "open-work-order"
+    next = "share-advice"
+    update_contact_data {
+      description = "$.Attributes.advice"
+      name        = "Hollow Hour work order"
+    }
+    error {
+      type = "NoMatchingError"
+      next = "share-advice"
     }
   }
 

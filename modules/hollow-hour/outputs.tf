@@ -64,6 +64,7 @@ output "flow_names" {
     [for f in flowascode_contact_flow.hh_district : f.name],
     [for f in flowascode_contact_flow.hh_queue_experience : f.name],
     [for m in flowascode_contact_flow_module.hh_greeting : m.name],
+    [flowascode_contact_flow_module.hh_offer_callback.name],
   ))
 }
 
@@ -71,11 +72,12 @@ output "flow_names" {
 # ARN it resolves to. tests/environments.tftest.hcl reads it to show that the
 # season switch moves one binding and nothing else.
 output "flow_refs" {
-  description = "Each flow's refs map, by Connect name."
+  description = "Each flow's and module's refs map, by Connect name."
   value = merge(
     { for f in local.single_flows : f.name => f.refs if f.refs != null },
     { for f in flowascode_contact_flow.hh_district : f.name => f.refs },
     { for f in flowascode_contact_flow.hh_queue_experience : f.name => f.refs },
+    { (flowascode_contact_flow_module.hh_offer_callback.name) = flowascode_contact_flow_module.hh_offer_callback.refs },
   )
 }
 
@@ -89,12 +91,23 @@ output "flowdocs" {
     { for f in flowascode_contact_flow.hh_district : f.name => f.flowdoc },
     { for f in flowascode_contact_flow.hh_queue_experience : f.name => f.flowdoc },
     { for m in flowascode_contact_flow_module.hh_greeting : m.name => m.flowdoc },
+    { (flowascode_contact_flow_module.hh_offer_callback.name) = flowascode_contact_flow_module.hh_offer_callback.flowdoc },
   )
 }
 
 output "recording_bucket" {
   description = "The call recording bucket (recordings.tf): SSE-S3, 30-day expiry, named under the amazon-connect- prefix the service-linked role can write to."
   value       = aws_s3_bucket.recordings.bucket
+}
+
+output "prompt_bucket" {
+  description = "The prompt audio bucket (prompts.tf): private, SSE-S3, holding the one committed wav the Connect prompt is made from."
+  value       = aws_s3_bucket.prompts.bucket
+}
+
+output "offer_callback_live_arn" {
+  description = "The callback module's live alias ARN: what the district flows bind as module:hh-offer-callback@live."
+  value       = flowascode_contact_flow_module_alias.hh_offer_callback_live.arn
 }
 
 output "greeting_live_arns" {
