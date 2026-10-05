@@ -8,6 +8,16 @@
 # district attributes changed to match, and anything that errors goes to
 # dispatch.
 #
+# Callbacks (tier decision 6): the flow offers one after hours and at
+# overflow-full (the sibling crew is full as well; dispatch-overflow is not
+# known to be), through module:hh-offer-callback@live, the in-set module's
+# live alias (hh-offer-callback-release.tf). A caller who presses 2, presses
+# nothing or presses a wrong key hears sign-off before the hang-up, never a
+# silent disconnect. The offer is never made at lines-busy, the
+# QueueAtCapacity branch of the dispatch transfer: that branch is reached
+# exactly when dispatch-overflow is full, where a callback into it would
+# take the error branch (the TypeScript-first repository's VERIFY.md, 16.2).
+#
 # One resource over the districts rather than a copy per district: every
 # district's flow has the same actions, and differs only in the names and
 # references interpolated from each.value. Adding a district is one entry in
@@ -42,6 +52,7 @@ resource "flowascode_contact_flow" "hh_district" {
     "flow:hh-queue-experience-${each.key}"                = flowascode_contact_flow.hh_queue_experience[each.key].arn
     "flow:hh-queue-experience-${each.value.sibling.slug}" = flowascode_contact_flow.hh_queue_experience[each.value.sibling.slug].arn
     "hours:${each.key}"                                   = aws_connect_hours_of_operation.profile[local.district_hours[each.key]].arn
+    "module:hh-offer-callback@live"                       = flowascode_contact_flow_module_alias.hh_offer_callback_live.arn
     "queue:dispatch-overflow"                             = aws_connect_queue.shared["dispatch-overflow"].arn
     "queue:${each.key}-crew"                              = aws_connect_queue.crew[each.key].arn
     "queue:${each.value.sibling.slug}-crew"               = aws_connect_queue.crew[each.value.sibling.slug].arn
@@ -299,7 +310,7 @@ resource "flowascode_contact_flow" "hh_district" {
     transfer_contact_to_queue {}
     error {
       type = "QueueAtCapacity"
-      next = "lines-busy"
+      next = "overflow-full"
     }
     error {
       type = "NoMatchingError"
@@ -308,10 +319,78 @@ resource "flowascode_contact_flow" "hh_district" {
   }
 
   action {
+    id   = "overflow-full"
+    next = "offer-callback"
+    message_participant {
+      text = "The $.FlowAttributes.overflowCrew crew is full as well, so every crew near you is out tonight."
+    }
+    error {
+      type = "NoMatchingError"
+      next = "offer-callback"
+    }
+  }
+
+  action {
     id   = "after-hours"
-    next = "hang-up"
+    next = "offer-callback"
     message_participant {
       text = "The ${each.value.name} crew is off shift right now. Night crews start at 4 in the afternoon. If anyone is hurt or in danger, call your local emergency number (911 in the US)."
+    }
+    error {
+      type = "NoMatchingError"
+      next = "offer-callback"
+    }
+  }
+
+  action {
+    id   = "offer-callback"
+    next = "sign-off"
+    get_participant_input {
+      input_time_limit_seconds = 8
+      store_input              = "False"
+      text                     = "We can call you back instead. For a callback, press 1. To end the call, press 2."
+    }
+    condition {
+      operator = "Equals"
+      operands = ["1"]
+      next     = "take-callback"
+    }
+    condition {
+      operator = "Equals"
+      operands = ["2"]
+      next     = "sign-off"
+    }
+    error {
+      type = "InputTimeLimitExceeded"
+      next = "sign-off"
+    }
+    error {
+      type = "NoMatchingCondition"
+      next = "sign-off"
+    }
+    error {
+      type = "NoMatchingError"
+      next = "sign-off"
+    }
+  }
+
+  action {
+    id   = "take-callback"
+    next = "hang-up"
+    invoke_flow_module {
+      flow_module_id = "module:hh-offer-callback@live"
+    }
+    error {
+      type = "NoMatchingError"
+      next = "apologize"
+    }
+  }
+
+  action {
+    id   = "sign-off"
+    next = "hang-up"
+    message_participant {
+      text = "All right. Keep the lights on, and call us again any time."
     }
     error {
       type = "NoMatchingError"
