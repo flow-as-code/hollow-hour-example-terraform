@@ -2,11 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The front door: recording notice, the greeting module, caller lookup, the
-# safety question, the six-question keypad interview, the grade, and then the
-# Lantern Crew (Hostile, Chorus) or the district menu (every other grade).
+# safety question, the plane check (a departed caller goes to hh-dead-line,
+# and only after the safety question), the six-question keypad interview,
+# the prank screen (never for a caller who said someone is hurt), the grade,
+# and then the Lantern Crew (Hostile, Chorus) or the district menu (every
+# other grade). Wherever the whispers are hooked, the holds are hooked too.
 #
-# check-caller and check-grade are Compares, and each carries next: Connect
-# refuses a Compare without Transitions.NextAction (VERIFY.md).
+# check-caller, check-plane, check-injured-first, check-verdict and
+# check-grade are Compares, and each carries next: Connect refuses a Compare
+# without Transitions.NextAction (VERIFY.md).
 
 resource "flowascode_contact_flow" "hh_hotline_main" {
   instance_id = aws_connect_instance.this.id
@@ -18,11 +22,16 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
   # Each reference key the actions use, bound to the resource it names. The
   # greeting is the live alias of var.season's module: the season switch.
   refs = {
+    "flow:hh-agent-hold"         = flowascode_contact_flow.hh_agent_hold.arn
     "flow:hh-agent-whisper"      = flowascode_contact_flow.hh_agent_whisper.arn
+    "flow:hh-customer-hold"      = flowascode_contact_flow.hh_customer_hold.arn
     "flow:hh-customer-whisper"   = flowascode_contact_flow.hh_customer_whisper.arn
+    "flow:hh-dead-line"          = flowascode_contact_flow.hh_dead_line.arn
     "flow:hh-district-menu"      = flowascode_contact_flow.hh_district_menu.arn
     "lambda:caller-lookup"       = aws_connect_lambda_function_association.stub["caller-lookup"].function_arn
     "lambda:classify-apparition" = aws_connect_lambda_function_association.stub["classify-apparition"].function_arn
+    "lambda:plane-check"         = aws_connect_lambda_function_association.stub["plane-check"].function_arn
+    "lambda:prank-score"         = aws_connect_lambda_function_association.stub["prank-score"].function_arn
     "module:greeting@live"       = flowascode_contact_flow_module_alias.hh_greeting_live[var.season].arn
     "queue:dispatch-overflow"    = aws_connect_queue.shared["dispatch-overflow"].arn
     "queue:lantern-crew"         = aws_connect_queue.shared["lantern-crew"].arn
@@ -190,7 +199,7 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     condition {
       operator = "Equals"
       operands = ["2"]
-      next     = "start-interview"
+      next     = "plane-check"
     }
     error {
       type = "InputTimeLimitExceeded"
@@ -203,6 +212,55 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     error {
       type = "NoMatchingError"
       next = "emergency-advice"
+    }
+  }
+
+  # Which side of the veil the caller is on. Only after the safety question:
+  # the dead line is never reached without it. Numbers 555-0190 to 555-0199
+  # are the departed (lambdas/plane-check).
+  action {
+    id   = "plane-check"
+    next = "check-plane"
+    invoke_lambda_function {
+      invocation_time_limit_seconds = 4
+      invocation_type               = "SYNCHRONOUS"
+      lambda_function_arn           = "lambda:plane-check"
+      response_validation = {
+        response_type = "JSON"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "start-interview"
+    }
+  }
+
+  action {
+    id   = "check-plane"
+    next = "start-interview"
+    compare {
+      comparison_value = "$.External.plane"
+    }
+    condition {
+      operator = "Equals"
+      operands = ["beyond"]
+      next     = "to-dead-line"
+    }
+    error {
+      type = "NoMatchingCondition"
+      next = "start-interview"
+    }
+  }
+
+  action {
+    id   = "to-dead-line"
+    next = "hang-up"
+    transfer_to_flow {
+      contact_flow_id = "flow:hh-dead-line"
+    }
+    error {
+      type = "NoMatchingError"
+      next = "start-interview"
     }
   }
 
@@ -560,7 +618,7 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
 
   action {
     id   = "ask-multiple"
-    next = "classify"
+    next = "check-injured-first"
     get_participant_input {
       input_time_limit_seconds = 8
       store_input              = "False"
@@ -574,25 +632,25 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     condition {
       operator = "Equals"
       operands = ["2"]
-      next     = "classify"
+      next     = "check-injured-first"
     }
     error {
       type = "InputTimeLimitExceeded"
-      next = "classify"
+      next = "check-injured-first"
     }
     error {
       type = "NoMatchingCondition"
-      next = "classify"
+      next = "check-injured-first"
     }
     error {
       type = "NoMatchingError"
-      next = "classify"
+      next = "check-injured-first"
     }
   }
 
   action {
     id   = "note-multiple"
-    next = "classify"
+    next = "check-injured-first"
     update_flow_attributes {
       flow_attributes = {
         multiple = {
@@ -602,7 +660,145 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     }
     error {
       type = "NoMatchingError"
+      next = "check-injured-first"
+    }
+  }
+
+  # The prank screen. A caller who said someone is hurt skips it (safety
+  # first); everyone else is scored, and a high verdict tags the contact and
+  # asks kindly. Pressing 1 clears the tag and classifies; anything else is a
+  # kind goodbye, so a wrong guess leaves no mark. Theo (555-0166) is the
+  # known dare (lambdas/prank-score).
+  action {
+    id   = "check-injured-first"
+    next = "prank-score"
+    compare {
+      comparison_value = "$.FlowAttributes.injured"
+    }
+    condition {
+      operator = "Equals"
+      operands = ["yes"]
+      next     = "classify"
+    }
+    error {
+      type = "NoMatchingCondition"
+      next = "prank-score"
+    }
+  }
+
+  action {
+    id   = "prank-score"
+    next = "check-verdict"
+    invoke_lambda_function {
+      invocation_time_limit_seconds = 4
+      invocation_type               = "SYNCHRONOUS"
+      lambda_function_arn           = "lambda:prank-score"
+      lambda_invocation_attributes = {
+        callerNumber = "$.CustomerEndpoint.Address"
+        canSee       = "$.FlowAttributes.canSee"
+        coldSpot     = "$.FlowAttributes.coldSpot"
+        movesObjects = "$.FlowAttributes.movesObjects"
+        multiple     = "$.FlowAttributes.multiple"
+        sounds       = "$.FlowAttributes.sounds"
+        touchedYou   = "$.FlowAttributes.touched"
+      }
+      response_validation = {
+        response_type = "JSON"
+      }
+    }
+    error {
+      type = "NoMatchingError"
       next = "classify"
+    }
+  }
+
+  action {
+    id   = "check-verdict"
+    next = "classify"
+    compare {
+      comparison_value = "$.External.verdict"
+    }
+    condition {
+      operator = "Equals"
+      operands = ["high"]
+      next     = "tag-screen"
+    }
+    error {
+      type = "NoMatchingCondition"
+      next = "classify"
+    }
+  }
+
+  action {
+    id   = "tag-screen"
+    next = "kind-check"
+    tag_contact {
+      tags = {
+        screen = "prank-suspected"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "kind-check"
+    }
+  }
+
+  action {
+    id   = "kind-check"
+    next = "dare-goodbye"
+    get_participant_input {
+      input_time_limit_seconds = 8
+      store_input              = "False"
+      text                     = "Some calls are dares, and that is all right. If this is really happening, press 1. Otherwise, press 2."
+    }
+    condition {
+      operator = "Equals"
+      operands = ["1"]
+      next     = "untag-screen"
+    }
+    condition {
+      operator = "Equals"
+      operands = ["2"]
+      next     = "dare-goodbye"
+    }
+    error {
+      type = "InputTimeLimitExceeded"
+      next = "dare-goodbye"
+    }
+    error {
+      type = "NoMatchingCondition"
+      next = "dare-goodbye"
+    }
+    error {
+      type = "NoMatchingError"
+      next = "dare-goodbye"
+    }
+  }
+
+  # The one way the tag leaves the flow set: if the untag itself fails, the
+  # caller who said it is really happening goes on with the tag rather than
+  # being hung up on. tests/flows.tftest.hcl holds that exception by name.
+  action {
+    id   = "untag-screen"
+    next = "classify"
+    untag_contact {
+      tag_keys = ["screen"]
+    }
+    error {
+      type = "NoMatchingError"
+      next = "classify"
+    }
+  }
+
+  action {
+    id   = "dare-goodbye"
+    next = "hang-up"
+    message_participant {
+      text = "Thanks for keeping us on our toes. Call back any time something goes bump."
+    }
+    error {
+      type = "NoMatchingError"
+      next = "hang-up"
     }
   }
 
@@ -628,7 +824,7 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     }
     error {
       type = "NoMatchingError"
-      next = "hand-to-dispatch"
+      next = "note-ungraded"
     }
   }
 
@@ -645,7 +841,7 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     }
     error {
       type = "NoMatchingError"
-      next = "hand-to-dispatch"
+      next = "note-ungraded"
     }
   }
 
@@ -754,10 +950,38 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
 
   action {
     id   = "set-lantern-agent-whisper"
-    next = "set-lantern-queue"
+    next = "set-lantern-customer-hold"
     update_contact_event_hooks {
       event_hooks = {
         AgentWhisper = "$${cdref:flow:hh-agent-whisper}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-lantern-customer-hold"
+    }
+  }
+
+  action {
+    id   = "set-lantern-customer-hold"
+    next = "set-lantern-agent-hold"
+    update_contact_event_hooks {
+      event_hooks = {
+        CustomerHold = "$${cdref:flow:hh-customer-hold}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-lantern-agent-hold"
+    }
+  }
+
+  action {
+    id   = "set-lantern-agent-hold"
+    next = "set-lantern-queue"
+    update_contact_event_hooks {
+      event_hooks = {
+        AgentHold = "$${cdref:flow:hh-agent-hold}"
       }
     }
     error {
@@ -789,6 +1013,25 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
     error {
       type = "NoMatchingError"
       next = "apologize"
+    }
+  }
+
+  # The dispatch fallback is the one chain an ungraded caller reaches (the
+  # classifier failed, or the grade could not be recorded), and the agent
+  # whisper and hold speak gradeName, so it gets a name on the way. A full
+  # Lantern Crew keeps the grade it has.
+  action {
+    id   = "note-ungraded"
+    next = "hand-to-dispatch"
+    update_contact_attributes {
+      attributes = {
+        gradeName = "Ungraded"
+      }
+      target_contact = "Current"
+    }
+    error {
+      type = "NoMatchingError"
+      next = "hand-to-dispatch"
     }
   }
 
@@ -835,10 +1078,38 @@ resource "flowascode_contact_flow" "hh_hotline_main" {
 
   action {
     id   = "set-dispatch-agent-whisper"
-    next = "set-dispatch-queue"
+    next = "set-dispatch-customer-hold"
     update_contact_event_hooks {
       event_hooks = {
         AgentWhisper = "$${cdref:flow:hh-agent-whisper}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-dispatch-customer-hold"
+    }
+  }
+
+  action {
+    id   = "set-dispatch-customer-hold"
+    next = "set-dispatch-agent-hold"
+    update_contact_event_hooks {
+      event_hooks = {
+        CustomerHold = "$${cdref:flow:hh-customer-hold}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-dispatch-agent-hold"
+    }
+  }
+
+  action {
+    id   = "set-dispatch-agent-hold"
+    next = "set-dispatch-queue"
+    update_contact_event_hooks {
+      event_hooks = {
+        AgentHold = "$${cdref:flow:hh-agent-hold}"
       }
     }
     error {

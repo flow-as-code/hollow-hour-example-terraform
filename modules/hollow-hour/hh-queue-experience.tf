@@ -8,6 +8,10 @@
 #
 # check-moved is a Compare, and it carries next: Connect refuses a Compare
 # without Transitions.NextAction (VERIFY.md).
+#
+# hold's error falls to settle-in, the loop that keeps speaking, never to
+# done: a queue flow that ends leaves the caller in queue with nothing
+# further from it. done stays for the paths that leave the queue.
 
 resource "flowascode_contact_flow" "hh_queue_experience" {
   for_each = local.district_flows
@@ -247,7 +251,7 @@ resource "flowascode_contact_flow" "hh_queue_experience" {
     }
     error {
       type = "NoMatchingError"
-      next = "done"
+      next = "settle-in"
     }
   }
 

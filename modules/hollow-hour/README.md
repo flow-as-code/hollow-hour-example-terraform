@@ -25,7 +25,7 @@ below 1, a time zone that is not a tz name, and a `name_prefix` that is not
 a short slug or starts `tfacc`.
 
 Outputs: `instance_id`, `instance_arn`, `instance_alias`, `flow_log_group_name`, `season`,
-`district_hours`, `lambda_function_names`, `flow_names`,
+`district_hours`, `lambda_function_names`, `flow_names`, `recording_bucket`,
 `greeting_live_arns`, and, for the tests and the equivalence check,
 `flow_refs` and `flowdocs`.
 

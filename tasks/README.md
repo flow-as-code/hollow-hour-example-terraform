@@ -9,7 +9,7 @@ place so a change here can be checked against them.
 | #   | Task          | Criteria                                                                                                                  | Status                                           |
 | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | T1  | First night   | [T1-first-night.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T1-first-night.md)     | live in dev, qa and prod, us-west-2 (2026-09-30) |
-| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | planned 2026-10-04; not started                  |
+| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | PRs 1 to 4 mirrored 2026-10-05 (snapshot `ce9d6f3`); planned on dev, not applied; PRs 5 to 7 and the Close follow |
 | T3  | Witching hour | [T3-witching-hour.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T3-witching-hour.md) | planned 2026-10-04; after the season             |
 | T4  | Full coverage | [T4-full-coverage.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T4-full-coverage.md) | planned 2026-10-04; follows flow-as-code Phase D |
 
@@ -38,6 +38,21 @@ the task file's "Where the criteria stand" with its UTC time.
    plan's drift and scenario evidence is written for one apply per tier.
 
 ## T2: full moon
+
+Where it stands (2026-10-05): the mirror of PRs 1 to 4 landed as one pull
+request: the six single-resource flow files, the hold hooks in
+`hh-district.tf`, `hh-district-menu.tf` and `hh-hotline-main.flow.tf`, the
+plane check and the prank screen in the hotline, `hold`'s error falling to
+`settle-in` in `hh-queue-experience.tf`, `hours:closed` in `hours.tf`, the
+recording storage in `recordings.tf` (not `instance.tf`: a file of its own,
+as that repository's `envs/bootstrap/recordings.tf`), the two Lambda
+comment fixes, the tftest runs `dead_line`, `plane_check`, `holds`, `hooks`,
+`prank_screen` and `callback_number` on walks over the planned FlowDocs
+(`tests/fixtures/walks`, `tests/fixtures/reach`), and the snapshot at
+`ce9d6f3` with `check.mjs` holding a map key no flow uses to a planned
+resource. A read-only plan of dev showed 13 to add, 10 to change, 0 to
+destroy (VERIFY.md, T9). `callbacks` and `hold_ab`, `prompts.tf`, awscc and
+E1 wait on the mirrors of PRs 6 and 7; the apply on the Close.
 
 - **Module files**: new `hh-dead-line.flow.tf`, `hh-dead-whisper.flow.tf`,
   `hh-dead-hold.flow.tf`, `hh-dead-queue-experience.flow.tf`,
@@ -83,13 +98,17 @@ the task file's "Where the criteria stand" with its UTC time.
   and records it in `VERIFY.md` as `harness-checked`; the fallback is an
   override in `harness/` that stands in for the awscc resources without
   skipping the prompt's binding check.
-- **Recording storage**: if an instance has no CALL_RECORDINGS storage
-  config, it is added in `instance.tf`: S3 with SSE-S3, no customer KMS
-  key, a lifecycle rule that expires recordings (tier decision 5).
+- **Recording storage**: that repository found no CALL_RECORDINGS storage
+  config on any instance (2026-10-05), so `recordings.tf` adds one per
+  environment: an `amazon-connect-` prefixed bucket (the only S3 grant the
+  service-linked role carries) with SSE-S3, no customer KMS key, public
+  access blocked, a 30-day expiry, and the storage config (tier decision 5;
+  VERIFY.md, RS1). Landed with the mirror of PR 3.
 - **Closed hours**: `hours:closed`, an `aws_connect_hours_of_operation`
   open for one minute a week (the provider requires one `config` block),
-  mirrored in `hours.tf` and bound in every profile's map, for S4's
-  substitution (TypeScript-first VERIFY HC1).
+  in `hours.tf`, named `hh-tf-<env>-closed` so that repository's maps bind
+  it, read by no flow, for S4's substitution (TypeScript-first VERIFY HC1).
+  Landed with the mirror of PR 3.
 
 ## T3: witching hour
 

@@ -30,7 +30,9 @@ resource "flowascode_contact_flow" "hh_district_menu" {
 
   refs = merge(
     {
+      "flow:hh-agent-hold"       = flowascode_contact_flow.hh_agent_hold.arn
       "flow:hh-agent-whisper"    = flowascode_contact_flow.hh_agent_whisper.arn
+      "flow:hh-customer-hold"    = flowascode_contact_flow.hh_customer_hold.arn
       "flow:hh-customer-whisper" = flowascode_contact_flow.hh_customer_whisper.arn
       "queue:dispatch-overflow"  = aws_connect_queue.shared["dispatch-overflow"].arn
     },
@@ -144,10 +146,38 @@ resource "flowascode_contact_flow" "hh_district_menu" {
 
   action {
     id   = "set-dispatch-agent-whisper"
-    next = "set-dispatch-queue"
+    next = "set-dispatch-customer-hold"
     update_contact_event_hooks {
       event_hooks = {
         AgentWhisper = "$${cdref:flow:hh-agent-whisper}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-dispatch-customer-hold"
+    }
+  }
+
+  action {
+    id   = "set-dispatch-customer-hold"
+    next = "set-dispatch-agent-hold"
+    update_contact_event_hooks {
+      event_hooks = {
+        CustomerHold = "$${cdref:flow:hh-customer-hold}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-dispatch-agent-hold"
+    }
+  }
+
+  action {
+    id   = "set-dispatch-agent-hold"
+    next = "set-dispatch-queue"
+    update_contact_event_hooks {
+      event_hooks = {
+        AgentHold = "$${cdref:flow:hh-agent-hold}"
       }
     }
     error {

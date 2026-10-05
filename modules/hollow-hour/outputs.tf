@@ -4,6 +4,24 @@
 # Ids and names an operator needs after an apply. None of them is ever
 # written to a committed file; read them with `tofu output`.
 
+locals {
+  # The flows that are one resource each (the *.flow.tf files and the menu),
+  # for the outputs that list every flow. The district and queue-experience
+  # flows iterate and are added beside these.
+  single_flows = [
+    flowascode_contact_flow.hh_hotline_main,
+    flowascode_contact_flow.hh_district_menu,
+    flowascode_contact_flow.hh_agent_whisper,
+    flowascode_contact_flow.hh_customer_whisper,
+    flowascode_contact_flow.hh_customer_hold,
+    flowascode_contact_flow.hh_agent_hold,
+    flowascode_contact_flow.hh_dead_line,
+    flowascode_contact_flow.hh_dead_whisper,
+    flowascode_contact_flow.hh_dead_hold,
+    flowascode_contact_flow.hh_dead_queue_experience,
+  ]
+}
+
 output "instance_id" {
   description = "The Connect instance id: what the AWS CLI calls take as --instance-id."
   value       = aws_connect_instance.this.id
@@ -42,12 +60,7 @@ output "lambda_function_names" {
 output "flow_names" {
   description = "Every flow and module this module deploys, by Connect name."
   value = sort(concat(
-    [
-      flowascode_contact_flow.hh_hotline_main.name,
-      flowascode_contact_flow.hh_district_menu.name,
-      flowascode_contact_flow.hh_agent_whisper.name,
-      flowascode_contact_flow.hh_customer_whisper.name,
-    ],
+    [for f in local.single_flows : f.name],
     [for f in flowascode_contact_flow.hh_district : f.name],
     [for f in flowascode_contact_flow.hh_queue_experience : f.name],
     [for m in flowascode_contact_flow_module.hh_greeting : m.name],
@@ -60,10 +73,7 @@ output "flow_names" {
 output "flow_refs" {
   description = "Each flow's refs map, by Connect name."
   value = merge(
-    {
-      (flowascode_contact_flow.hh_hotline_main.name)  = flowascode_contact_flow.hh_hotline_main.refs
-      (flowascode_contact_flow.hh_district_menu.name) = flowascode_contact_flow.hh_district_menu.refs
-    },
+    { for f in local.single_flows : f.name => f.refs if f.refs != null },
     { for f in flowascode_contact_flow.hh_district : f.name => f.refs },
     { for f in flowascode_contact_flow.hh_queue_experience : f.name => f.refs },
   )
@@ -75,16 +85,16 @@ output "flow_refs" {
 output "flowdocs" {
   description = "Each flow's and module's FlowDoc JSON, by Connect name."
   value = merge(
-    {
-      (flowascode_contact_flow.hh_hotline_main.name)     = flowascode_contact_flow.hh_hotline_main.flowdoc
-      (flowascode_contact_flow.hh_district_menu.name)    = flowascode_contact_flow.hh_district_menu.flowdoc
-      (flowascode_contact_flow.hh_agent_whisper.name)    = flowascode_contact_flow.hh_agent_whisper.flowdoc
-      (flowascode_contact_flow.hh_customer_whisper.name) = flowascode_contact_flow.hh_customer_whisper.flowdoc
-    },
+    { for f in local.single_flows : f.name => f.flowdoc },
     { for f in flowascode_contact_flow.hh_district : f.name => f.flowdoc },
     { for f in flowascode_contact_flow.hh_queue_experience : f.name => f.flowdoc },
     { for m in flowascode_contact_flow_module.hh_greeting : m.name => m.flowdoc },
   )
+}
+
+output "recording_bucket" {
+  description = "The call recording bucket (recordings.tf): SSE-S3, 30-day expiry, named under the amazon-connect- prefix the service-linked role can write to."
+  value       = aws_s3_bucket.recordings.bucket
 }
 
 output "greeting_live_arns" {
