@@ -18,7 +18,7 @@ their committed `terraform.tfvars`, and prod-october (prod with `hours =
    provider computes for every flow and module.
 2. Each is compared with the FlowDoc of the same name in `snapshot/`,
    vendored byte for byte from the TypeScript-first repository at the
-   commit `snapshot/SOURCE.md` records: the same twelve names, and per
+   commit `snapshot/SOURCE.md` records: the same eighteen names, and per
    document the same kind, Connect type, start action, module settings,
    references (as `${cdref:...}` tokens) and every action's Identifier,
    Type, Parameters and Transitions, in order. Descriptions and canvas
@@ -32,7 +32,10 @@ their committed `terraform.tfvars`, and prod-october (prod with `hours =
    TypeScript-first repository's `refs/<profile>.tfmap.json` for the same
    profile, its `hh-<environment>-*` names read as `hh-tf-<environment>-*`.
    A swapped queue, a swapped Lambda or a greeting fixed to one season
-   fails it; so does a binding the rewrite cannot name.
+   fails it; so does a binding the rewrite cannot name. A key that map
+   binds and no flow uses (`hours:closed`, which only a scenario
+   substitutes) must still name a queue, hours profile or Lambda the
+   module plans.
 4. The single-resource `*.flow.tf` files are also read by
    `@flow-as-code/hcl`, the reader flow-cli and the studio use, and must
    give the same documents.

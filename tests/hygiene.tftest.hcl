@@ -26,6 +26,16 @@ run "hygiene" {
     error_message = "A file under modules/ holds a literal arn:aws. Bind references through refs to resource attributes, never ARNs."
   }
 
+  # The recording bucket relies on SSE-S3 and the service-linked role's
+  # amazon-connect-* grant alone (tier decision 5; recordings.tf).
+  assert {
+    condition = [
+      for f in fileset(var.repo, "modules/**/*.tf") : f
+      if alltrue([for p in var.skip : !can(regex(p, f))]) && can(regex("aws_kms_key|aws_s3_bucket_policy", file("${var.repo}/${f}")))
+    ] == []
+    error_message = "The module creates a KMS key or a bucket policy. The recording bucket takes SSE-S3 and no customer key, and the service-linked role's own grant covers amazon-connect-* buckets."
+  }
+
   assert {
     condition = [
       for f in fileset(var.repo, "**/{*.tf,*.tfvars,*.tftest.hcl,*.example,*.mjs}") : f

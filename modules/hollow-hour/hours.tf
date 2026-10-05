@@ -60,3 +60,35 @@ resource "aws_connect_hours_of_operation" "profile" {
 
   tags = local.tags
 }
+
+# Closed hours for the TypeScript-first repository's scenario S4 (the
+# after-hours callback), substituted for a district's hours:<slug> at run
+# time and read by no flow: nothing else here is ever closed (always_open,
+# night_shift and the dead's hours all open every day). The provider's
+# resource needs at least one config block, so this one is open for one
+# minute a week, Sunday 03:00 to 03:01 in var.time_zone, and S4 is never run
+# in that minute. Bound as hours:closed in that repository's address maps;
+# tools/equivalence holds that this resource carries the same name. Whether
+# a one-minute range is accepted, and read as closed outside it, is
+# VERIFY.md (HC1), settled by this tier's Close apply.
+# https://docs.aws.amazon.com/connect/latest/APIReference/API_CreateHoursOfOperation.html
+resource "aws_connect_hours_of_operation" "closed" {
+  instance_id = aws_connect_instance.this.id
+  name        = "${local.name_prefix}-closed"
+  description = "Closed, for the after-hours scenario: open one minute a week."
+  time_zone   = var.time_zone
+
+  config {
+    day = "SUNDAY"
+    start_time {
+      hours   = 3
+      minutes = 0
+    }
+    end_time {
+      hours   = 3
+      minutes = 1
+    }
+  }
+
+  tags = local.tags
+}

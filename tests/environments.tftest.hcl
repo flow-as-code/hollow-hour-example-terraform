@@ -131,8 +131,8 @@ run "content" {
   }
 
   assert {
-    condition     = length(output.flowdocs["prod"]) == 12
-    error_message = "Each profile deploys twelve flows and modules."
+    condition     = length(output.flowdocs["prod"]) == 18
+    error_message = "Each profile deploys eighteen flows and modules."
   }
 }
 

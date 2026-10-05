@@ -1,8 +1,9 @@
 # Copyright 2026 The flow-as-code Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# hh-district-<slug>, one per entry of var.districts: set the crew queue and
-# the whispers and queue experience, check the crew's hours, then transfer;
+# hh-district-<slug>, one per entry of var.districts: set the crew queue,
+# the whispers, the holds and the queue experience (five hooks, one per
+# block), check the crew's hours, then transfer;
 # a full queue moves the caller to the overflow sibling's crew with the
 # district attributes changed to match, and anything that errors goes to
 # dispatch.
@@ -34,7 +35,9 @@ resource "flowascode_contact_flow" "hh_district" {
   tags        = local.flow_tags
 
   refs = {
+    "flow:hh-agent-hold"                                  = flowascode_contact_flow.hh_agent_hold.arn
     "flow:hh-agent-whisper"                               = flowascode_contact_flow.hh_agent_whisper.arn
+    "flow:hh-customer-hold"                               = flowascode_contact_flow.hh_customer_hold.arn
     "flow:hh-customer-whisper"                            = flowascode_contact_flow.hh_customer_whisper.arn
     "flow:hh-queue-experience-${each.key}"                = flowascode_contact_flow.hh_queue_experience[each.key].arn
     "flow:hh-queue-experience-${each.value.sibling.slug}" = flowascode_contact_flow.hh_queue_experience[each.value.sibling.slug].arn
@@ -72,10 +75,38 @@ resource "flowascode_contact_flow" "hh_district" {
 
   action {
     id   = "set-agent-whisper"
-    next = "set-queue-experience"
+    next = "set-customer-hold"
     update_contact_event_hooks {
       event_hooks = {
         AgentWhisper = "$${cdref:flow:hh-agent-whisper}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-customer-hold"
+    }
+  }
+
+  action {
+    id   = "set-customer-hold"
+    next = "set-agent-hold"
+    update_contact_event_hooks {
+      event_hooks = {
+        CustomerHold = "$${cdref:flow:hh-customer-hold}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-agent-hold"
+    }
+  }
+
+  action {
+    id   = "set-agent-hold"
+    next = "set-queue-experience"
+    update_contact_event_hooks {
+      event_hooks = {
+        AgentHold = "$${cdref:flow:hh-agent-hold}"
       }
     }
     error {
@@ -331,10 +362,38 @@ resource "flowascode_contact_flow" "hh_district" {
 
   action {
     id   = "set-dispatch-agent-whisper"
-    next = "set-dispatch-queue"
+    next = "set-dispatch-customer-hold"
     update_contact_event_hooks {
       event_hooks = {
         AgentWhisper = "$${cdref:flow:hh-agent-whisper}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-dispatch-customer-hold"
+    }
+  }
+
+  action {
+    id   = "set-dispatch-customer-hold"
+    next = "set-dispatch-agent-hold"
+    update_contact_event_hooks {
+      event_hooks = {
+        CustomerHold = "$${cdref:flow:hh-customer-hold}"
+      }
+    }
+    error {
+      type = "NoMatchingError"
+      next = "set-dispatch-agent-hold"
+    }
+  }
+
+  action {
+    id   = "set-dispatch-agent-hold"
+    next = "set-dispatch-queue"
+    update_contact_event_hooks {
+      event_hooks = {
+        AgentHold = "$${cdref:flow:hh-agent-hold}"
       }
     }
     error {

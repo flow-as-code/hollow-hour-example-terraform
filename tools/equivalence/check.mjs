@@ -36,7 +36,12 @@
 //    address there), with that repository's names (hh-<environment>-*)
 //    read as this one's (hh-tf-<environment>-*). A refs value the rewrite does
 //    not cover stays unknown at plan, and fails the check rather than being
-//    skipped.
+//    skipped. A key that repository's map binds and no flow uses (hours:closed,
+//    which only a scenario substitutes) must still name a resource the module
+//    plans, under the same name, so the two sets of resources stay the same;
+//    one its rules cannot name yet (prompt:salt-line-tips, until the prompt
+//    lands in both repositories) is skipped there and fails the moment a flow
+//    uses it.
 //
 // The flows that live one per file with no for_each or dynamic block
 // (modules/hollow-hour/*.flow.tf) are read a second way too: by
@@ -194,6 +199,22 @@ function namedCopy() {
   return { root, harness, env: { TF_DATA_DIR: join(HARNESS, ".terraform") } };
 }
 
+// The names the module plans for the resources a reference key can bind:
+// queues, hours profiles and Lambdas. A key no flow binds is checked against
+// these.
+function plannedNames(shown) {
+  const out = new Set();
+  const visit = (mod) => {
+    for (const r of mod?.resources ?? []) {
+      if (r.type === "aws_connect_queue" || r.type === "aws_connect_hours_of_operation") out.add(r.values.name);
+      if (r.type === "aws_lambda_function") out.add(r.values.function_name);
+    }
+    for (const child of mod?.child_modules ?? []) visit(child);
+  };
+  visit(shown?.planned_values?.root_module);
+  return out;
+}
+
 // What each reference key binds in the TypeScript-first repository, by name.
 // Its tfmaps bind keys to Terraform addresses in its envs/<environment>/;
 // these are the names those addresses carry there (its envs/*/supporting.tf,
@@ -218,10 +239,18 @@ function expectedBindings(profileName, environment) {
   return out;
 }
 
-function compareBindings(profileName, environment, refsByFlow) {
+function compareBindings(profileName, environment, refsByFlow, planned) {
   const want = expectedBindings(profileName, environment);
   const out = [];
   let count = 0;
+  const used = new Set(Object.values(refsByFlow).flatMap((refs) => Object.keys(refs)));
+  for (const [key, expected] of Object.entries(want).sort()) {
+    if (used.has(key) || typeof expected === "object") continue;
+    count++;
+    if (!planned.has(expected)) {
+      out.push(`${profileName}: ${key} is bound there to ${expected} and used by no flow; the module plans no resource of that name`);
+    }
+  }
   for (const [flow, refs] of Object.entries(refsByFlow).sort()) {
     for (const [key, got] of Object.entries(refs).sort()) {
       count++;
@@ -322,7 +351,8 @@ function main() {
       if (hasBlockingFindings(findings)) problems.push(`${profileName}: lint:\n${toText(findings)}`);
 
       // 2. Bindings.
-      const result = compareBindings(profileName, profile.environment, plannedRefs(plan(named.harness, profile, named.env)));
+      const namedPlan = plan(named.harness, profile, named.env);
+      const result = compareBindings(profileName, profile.environment, plannedRefs(namedPlan), plannedNames(namedPlan));
       problems.push(...result.problems);
       bindings += result.count;
     }
@@ -354,7 +384,7 @@ function main() {
   console.log(
     `Equivalent in ${Object.keys(all).length} profiles (${Object.keys(all).join(", ")}): ` +
       `${wantNames.length} flows and modules, ${actions} actions, identical to the snapshot as the provider plans them; ` +
-      `${bindings} bindings, each to the resource the TypeScript-first repository binds; ` +
+      `${bindings} bindings (a flow's, or a key only a scenario uses), each to the resource the TypeScript-first repository binds; ` +
       `and ${flowFiles.length} flows as @flow-as-code/hcl reads their .flow.tf (${source}).`,
   );
   const findings = lint(Object.values(prodDocs ?? {}));

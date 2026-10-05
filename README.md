@@ -30,6 +30,12 @@ Connect instances, nothing shared.
 > also checked offline on every change (fmt, validate of every root,
 > `tofu test`, equivalence of content and bindings in every profile). See
 > [VERIFY.md](VERIFY.md).
+>
+> Tier 2, PRs 1 to 4 of the TypeScript-first repository (the hold flows, the
+> Queue of the Dead, the prank screen, the closed hours and the recording
+> storage), is mirrored here as of 2026-10-05 and planned read-only against
+> dev: 13 to add, 10 to change, 0 to destroy. The apply comes with the
+> tier's Close, one per tier ([tasks/README.md](tasks/README.md)).
 
 ## The hotline
 
@@ -43,6 +49,15 @@ hours, and a full crew queue overflows to the sibling district named in
 `overflow_to`. The story, the rubric and the safety rules are the
 TypeScript-first repository's README; the flows here are the same flows.
 
+Tier 2, so far: a hold flow for each side of every call (`hh-customer-hold`,
+`hh-agent-hold`), hooked wherever the whispers are; the plane check, which
+sends a departed caller (555-0190 to 555-0199) to `hh-dead-line`, always
+after the safety question and never before it, where they are welcomed,
+recorded on the liaison's side only, and queued for the dead; and the prank
+screen, which tags a likely dare, asks kindly, and untags the contact when
+the caller says it is really happening. Nobody who said someone is hurt is
+screened.
+
 This is a fictional service and must never be mistaken for a real emergency
 line. There is no public phone number: the environments claim none.
 
@@ -54,17 +69,24 @@ environments/
   dev/ qa/ prod/         thin roots: identical .tf files, one terraform.tfvars each
 modules/hollow-hour/     the entire environment
   instance.tf            the Connect instance and its flow log group
-  hours.tf queues.tf     both hours profiles; a crew queue per district, three shared
+  recordings.tf          the call recording bucket and the instance's CALL_RECORDINGS store
+  hours.tf queues.tf     both hours profiles and the closed hours; a crew queue per district, three shared
   lambdas.tf lambdas/    six stub Lambdas, zipped at plan time, associated with the instance
   hh-greeting.tf         the two greeting modules, their versions and live aliases
   hh-hotline-main.flow.tf
   hh-agent-whisper.flow.tf
   hh-customer-whisper.flow.tf
+  hh-customer-hold.flow.tf
+  hh-agent-hold.flow.tf
+  hh-dead-line.flow.tf   the line for the departed, and its whisper, hold and queue flows:
+  hh-dead-whisper.flow.tf
+  hh-dead-hold.flow.tf
+  hh-dead-queue-experience.flow.tf
   hh-district-menu.tf    one keypad key per district
   hh-district.tf         one flow per district (for_each)
   hh-queue-experience.tf one queue flow per district (for_each)
 tasks/                   what each tier changes here; the criteria live in the TypeScript-first repository
-tests/                   tofu test: flows, environments, hygiene (no AWS call)
+tests/                   tofu test: flows, environments, hygiene (no AWS call); fixtures/reach walks a flow
 tools/equivalence/       CI check only (Node): the flows and their bindings equal the TypeScript-first ones
 .github/workflows/       ci.yml (pushes to main, pull requests), deploy.yml (dispatch: plan, then apply)
 ```
@@ -239,7 +261,7 @@ cannot read it back from `tofu output`.
 
 The same four commands per environment. The first apply creates the
 instance (a few minutes; the provider waits until it is ACTIVE) and then
-its 62 other resources.
+everything in it (75 other resources as of Tier 2 PRs 1 to 4; 62 at Tier 1).
 
 ```sh
 cp environments/dev/backend.hcl.example environments/dev/backend.hcl
@@ -462,10 +484,10 @@ live apply.
 
 Not needed to deploy. This needs Node 22.12 or later.
 
-The three flows that are one resource each, `hh-hotline-main.flow.tf`,
-`hh-agent-whisper.flow.tf` and `hh-customer-whisper.flow.tf`, are in the
-shape flow-cli reads: `flow-cli synth` turns each into a FlowDoc, and
-`flow-cli studio` opens it.
+The nine flows that are one resource each, the `*.flow.tf` files (the
+hotline, the two whispers, the two holds, the dead line and its whisper,
+hold and queue flows), are in the shape flow-cli reads: `flow-cli synth`
+turns each into a FlowDoc, and `flow-cli studio` opens it.
 
 The flows that iterate (`hh-district.tf`, `hh-queue-experience.tf`,
 `hh-district-menu.tf` and the greetings) use `for_each` or `dynamic`, which
@@ -491,7 +513,7 @@ the module; make it in the HCL.
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tofu fmt -check -recursive`                                 | formatting                                                                                                                                                                                                             |
 | `tofu -chdir=<root> init -backend=false && tofu -chdir=<root> validate` | every root: `bootstrap`, the three environments, `tools/equivalence/harness`                                                                                                                                |
-| `tofu -chdir=tests init -test-directory=.` then `tofu -chdir=tests test -test-directory=.` | `flows`: every Compare has `next`, every reference is bound and every binding used, no ARN in a flow, a queue and two flows and a menu key per district, the variable validations. `environments`: the roots differ only in tfvars values, every profile deploys the same FlowDocs, the season moves one binding. `hygiene`: no `arn:aws` in `modules/`, no account or instance id, license headers, no em-dash, pinned actions |
+| `tofu -chdir=tests init -test-directory=.` then `tofu -chdir=tests test -test-directory=.` | `flows`: every Compare has `next`, every reference is bound and every binding used, no ARN in a flow, a queue and two flows and a menu key per district, the closed hours and the recording storage, the variable validations; and the Tier 2 runs, on walks over the planned FlowDocs (`tests/fixtures/walks`, `fixtures/reach`): the dead line's shape, the plane check only after the safety question, each hold flow one block, the hooks one per block and never pointing back and the holds beside the whispers, the prank screen never for an injured caller and its tag untagged or the call ended, the callback number with both errors. `environments`: the roots differ only in tfvars values, every profile deploys the same FlowDocs, the season moves one binding. `hygiene`: no `arn:aws`, KMS key or bucket policy in `modules/`, no account or instance id, license headers, no em-dash, pinned actions |
 | `npm --prefix tools/equivalence ci && node tools/equivalence/check.mjs` | in dev, qa, prod and prod-october: the flows equal the TypeScript-first repository's, action by action, and each reference is bound to the resource that repository binds it to                                  |
 
 No check makes an AWS call. The tests mock `aws`, and the flowascode
@@ -509,17 +531,21 @@ from the TypeScript-first repository (`tools/equivalence/snapshot/`, source
 commit in `SOURCE.md`):
 
 - **Content.** Each flow's FlowDoc, read from the plan, equals the FlowDoc
-  of the same name there: the same twelve names, and per document the
+  of the same name there: the same eighteen names, and per document the
   same type, start action, reference tokens and every action's id, type,
   parameters and transitions, in order.
 - **Bindings.** Each reference is bound to the resource that repository
   binds it to in the same profile (its `refs/<profile>.tfmap.json`), read
   by name: a flow bound to the wrong queue, Lambda or greeting fails,
-  although its tokens match.
+  although its tokens match. A key that map binds and no flow uses
+  (`hours:closed`, which only a scenario substitutes) must still name a
+  resource the module plans.
 
-The three `.flow.tf` files are also read by `@flow-as-code/hcl`, the reader
+The nine `.flow.tf` files are also read by `@flow-as-code/hcl`, the reader
 flow-cli uses, and must give the same documents. On 2026-09-30: 12 flows
-and modules, 195 actions and 44 bindings per profile, identical.
+and modules, 195 actions and 44 bindings per profile, identical. On
+2026-10-05, with Tier 2 PRs 1 to 4: 18 flows and modules, 248 actions and
+65 bindings per profile.
 
 Equivalence covers flow content and bindings, not descriptions. The
 deployed descriptions differ from the TypeScript-first repository's on
@@ -550,9 +576,11 @@ to have finished.
    ```
 
    This removes the flows and modules, the Lambdas and their roles and log
-   groups, the queues and hours, the instance, and then its flow log group
-   (with `manage_flow_log_group = false`, delete that group yourself; see
-   "If Connect refuses the log group"). Repeat for qa and dev.
+   groups, the queues and hours, the recording storage and its bucket
+   (`force_destroy`: whatever recordings are still in it go too), the
+   instance, and then its flow log group (with `manage_flow_log_group =
+   false`, delete that group yourself; see "If Connect refuses the log
+   group"). Repeat for qa and dev.
 
 2. The state bucket. `prevent_destroy` refuses any plan that deletes it,
    and it is versioned, so move the bootstrap state out of it first:
