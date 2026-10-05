@@ -63,6 +63,7 @@ modules/hollow-hour/     the entire environment
   hh-district-menu.tf    one keypad key per district
   hh-district.tf         one flow per district (for_each)
   hh-queue-experience.tf one queue flow per district (for_each)
+tasks/                   what each tier changes here; the criteria live in the TypeScript-first repository
 tests/                   tofu test: flows, environments, hygiene (no AWS call)
 tools/equivalence/       CI check only (Node): the flows and their bindings equal the TypeScript-first ones
 .github/workflows/       ci.yml (pushes to main, pull requests), deploy.yml (dispatch: plan, then apply)
