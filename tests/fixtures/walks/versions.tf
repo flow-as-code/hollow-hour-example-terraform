@@ -9,5 +9,8 @@ terraform {
     flowascode = {
       source = "flow-as-code/flowascode"
     }
+    awscc = {
+      source = "hashicorp/awscc"
+    }
   }
 }
