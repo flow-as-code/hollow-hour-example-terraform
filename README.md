@@ -31,11 +31,12 @@ Connect instances, nothing shared.
 > `tofu test`, equivalence of content and bindings in every profile). See
 > [VERIFY.md](VERIFY.md).
 >
-> Tier 2, PRs 1 to 4 of the TypeScript-first repository (the hold flows, the
+> Tier 2, PRs 1 to 7 of the TypeScript-first repository (the hold flows, the
 > Queue of the Dead, the prank screen, the closed hours and the recording
-> storage), is mirrored here as of 2026-10-05 and planned read-only against
-> dev: 13 to add, 10 to change, 0 to destroy. The apply comes with the
-> tier's Close, one per tier ([tasks/README.md](tasks/README.md)).
+> storage; then the work order, the callbacks and the recorded hold prompt
+> with its A/B split), is mirrored here as of 2026-10-05 and planned
+> read-only against dev: 22 to add, 10 to change, 0 to destroy. The apply comes with the tier's Close,
+> one per tier ([tasks/README.md](tasks/README.md)).
 
 ## The hotline
 
@@ -56,7 +57,15 @@ after the safety question and never before it, where they are welcomed,
 recorded on the liaison's side only, and queued for the dead; and the prank
 screen, which tags a likely dare, asks kindly, and untags the contact when
 the caller says it is really happening. Nobody who said someone is hurt is
-screened.
+screened. Then every graded call opens a work order (UpdateContactData,
+named "Hollow Hour work order" and described by the advice, so a crew finds
+it in contact search); a caller a crew cannot take, after hours or when
+both crews are full, is offered a callback through the `hh-offer-callback`
+module, always into the dispatch-overflow queue, and a caller facing a long
+wait is offered one from the queue flow itself; and the queue flows run an
+A/B test on the hold, half the callers hearing the spoken tips and half a
+recorded prompt (`prompts.tf`, the one awscc resource), each run tagged
+`holdVariant` so the result is readable in contact search.
 
 This is a fictional service and must never be mistaken for a real emergency
 line. There is no public phone number: the environments claim none.
@@ -72,7 +81,9 @@ modules/hollow-hour/     the entire environment
   recordings.tf          the call recording bucket and the instance's CALL_RECORDINGS store
   hours.tf queues.tf     both hours profiles and the closed hours; a crew queue per district, three shared
   lambdas.tf lambdas/    six stub Lambdas, zipped at plan time, associated with the instance
+  prompts.tf prompts/    the recorded hold prompt: a private bucket, the committed wav, awscc_connect_prompt
   hh-greeting.tf         the two greeting modules, their versions and live aliases
+  hh-offer-callback.flow.tf       the callback module; hh-offer-callback-release.tf its version and live alias
   hh-hotline-main.flow.tf
   hh-agent-whisper.flow.tf
   hh-customer-whisper.flow.tf
@@ -261,7 +272,10 @@ cannot read it back from `tofu output`.
 
 The same four commands per environment. The first apply creates the
 instance (a few minutes; the provider waits until it is ACTIVE) and then
-everything in it (75 other resources as of Tier 2 PRs 1 to 4; 62 at Tier 1).
+everything in it (84 other resources as of Tier 2 PRs 1 to 7; 75 after
+PRs 1 to 4; 62 at Tier 1). The first init downloads the awscc provider, which
+is hundreds of megabytes; `TF_PLUGIN_CACHE_DIR` shares one download between
+roots ([CONTRIBUTING.md](CONTRIBUTING.md), "Running the checks").
 
 ```sh
 cp environments/dev/backend.hcl.example environments/dev/backend.hcl
@@ -513,7 +527,7 @@ the module; make it in the HCL.
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tofu fmt -check -recursive`                                 | formatting                                                                                                                                                                                                             |
 | `tofu -chdir=<root> init -backend=false && tofu -chdir=<root> validate` | every root: `bootstrap`, the three environments, `tools/equivalence/harness`                                                                                                                                |
-| `tofu -chdir=tests init -test-directory=.` then `tofu -chdir=tests test -test-directory=.` | `flows`: every Compare has `next`, every reference is bound and every binding used, no ARN in a flow, a queue and two flows and a menu key per district, the closed hours and the recording storage, the variable validations; and the Tier 2 runs, on walks over the planned FlowDocs (`tests/fixtures/walks`, `fixtures/reach`): the dead line's shape, the plane check only after the safety question, each hold flow one block, the hooks one per block and never pointing back and the holds beside the whispers, the prank screen never for an injured caller and its tag untagged or the call ended, the callback number with both errors. `environments`: the roots differ only in tfvars values, every profile deploys the same FlowDocs, the season moves one binding. `hygiene`: no `arn:aws`, KMS key or bucket policy in `modules/`, no account or instance id, license headers, no em-dash, pinned actions |
+| `tofu -chdir=tests init -test-directory=.` then `tofu -chdir=tests test -test-directory=.` | `flows`: every Compare has `next`, every reference is bound and every binding used, no ARN in a flow, a queue and two flows and a menu key per district, the closed hours and the recording storage, the variable validations; and the Tier 2 runs, on walks over the planned FlowDocs (`tests/fixtures/walks`, `fixtures/reach`): the dead line's shape, the plane check only after the safety question, each hold flow one block, the hooks one per block and never pointing back and the holds beside the whispers, the prank screen never for an injured caller and its tag untagged or the call ended, the callback number with both errors, every callback into dispatch-overflow with static counts and never from `lines-busy` and the queue flow's callback path ending the call, the hold split covering 1 to 100 at 50/50 with the prompt used only in the recorded hold; the prompt's bucket, object and tags. `environments`: the roots differ only in tfvars values, every profile deploys the same FlowDocs, the season moves one binding. `hygiene`: no `arn:aws`, KMS key or bucket policy in `modules/`, no account or instance id, license headers, no em-dash, pinned actions |
 | `npm --prefix tools/equivalence ci && node tools/equivalence/check.mjs` | in dev, qa, prod and prod-october: the flows equal the TypeScript-first repository's, action by action, and each reference is bound to the resource that repository binds it to                                  |
 
 No check makes an AWS call. The tests mock `aws`, and the flowascode
@@ -531,21 +545,29 @@ from the TypeScript-first repository (`tools/equivalence/snapshot/`, source
 commit in `SOURCE.md`):
 
 - **Content.** Each flow's FlowDoc, read from the plan, equals the FlowDoc
-  of the same name there: the same eighteen names, and per document the
+  of the same name there: the same nineteen names, and per document the
   same type, start action, reference tokens and every action's id, type,
   parameters and transitions, in order.
 - **Bindings.** Each reference is bound to the resource that repository
   binds it to in the same profile (its `refs/<profile>.tfmap.json`), read
-  by name: a flow bound to the wrong queue, Lambda or greeting fails,
-  although its tokens match. A key that map binds and no flow uses
+  by name: a flow bound to the wrong queue, Lambda, prompt or greeting
+  fails, although its tokens match. A key that map binds and no flow uses
   (`hours:closed`, which only a scenario substitutes) must still name a
-  resource the module plans.
+  resource the module plans. `module:hh-offer-callback@live` has no map
+  entry there (its emitter binds the alias it writes beside the flows), so
+  the expected binding is the alias by name, as for the greetings.
 
-The nine `.flow.tf` files are also read by `@flow-as-code/hcl`, the reader
+The plan runs against a copy of the module in which the prompt is a
+`terraform_data` stand-in, because awscc validates its credentials against
+STS as it configures and cannot be kept offline ([VERIFY.md](VERIFY.md),
+T10); the prompt's binding is still compared by name.
+
+The ten `.flow.tf` files are also read by `@flow-as-code/hcl`, the reader
 flow-cli uses, and must give the same documents. On 2026-09-30: 12 flows
 and modules, 195 actions and 44 bindings per profile, identical. On
 2026-10-05, with Tier 2 PRs 1 to 4: 18 flows and modules, 248 actions and
-65 bindings per profile.
+65 bindings per profile; with PRs 5 to 7: 19 flows and modules,
+312 actions and 75 bindings per profile.
 
 Equivalence covers flow content and bindings, not descriptions. The
 deployed descriptions differ from the TypeScript-first repository's on

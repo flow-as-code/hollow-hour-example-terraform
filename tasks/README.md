@@ -9,7 +9,7 @@ place so a change here can be checked against them.
 | #   | Task          | Criteria                                                                                                                  | Status                                           |
 | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | T1  | First night   | [T1-first-night.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T1-first-night.md)     | live in dev, qa and prod, us-west-2 (2026-09-30) |
-| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | PRs 1 to 4 mirrored 2026-10-05 (snapshot `ce9d6f3`); planned on dev, not applied; PRs 5 to 7 and the Close follow |
+| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | PRs 1 to 7 mirrored 2026-10-05 (snapshot `b8e5b3f`); E1 answered (VERIFY.md, T10); planned on dev, not applied; the Close follows |
 | T3  | Witching hour | [T3-witching-hour.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T3-witching-hour.md) | planned 2026-10-04; after the season             |
 | T4  | Full coverage | [T4-full-coverage.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T4-full-coverage.md) | planned 2026-10-04; follows flow-as-code Phase D |
 
@@ -51,19 +51,50 @@ comment fixes, the tftest runs `dead_line`, `plane_check`, `holds`, `hooks`,
 (`tests/fixtures/walks`, `tests/fixtures/reach`), and the snapshot at
 `ce9d6f3` with `check.mjs` holding a map key no flow uses to a planned
 resource. A read-only plan of dev showed 13 to add, 10 to change, 0 to
-destroy (VERIFY.md, T9). `callbacks` and `hold_ab`, `prompts.tf`, awscc and
-E1 wait on the mirrors of PRs 6 and 7; the apply on the Close.
+destroy (VERIFY.md, T9).
+
+The mirror of PRs 5 to 7 landed as a second pull request the same day:
+`open-work-order` in `hh-hotline-main.flow.tf`; `hh-offer-callback.flow.tf`
+(the module alone, so flow-cli reads it) with its version and live alias in
+`hh-offer-callback-release.tf`, the shape `hh-greeting.tf` carries, bound by
+`hh-district.tf` as `module:hh-offer-callback@live` (that repository
+invokes it through the alias, not unaliased as first planned: its
+tasks/T2-full-moon.md, Deviations) at `after-hours` and the new
+`overflow-full`, with `sign-off` before the hang-up and `lines-busy` left
+plain; the inline callback in `hh-queue-experience.tf` ending in
+DisconnectParticipant, and the hold A/B split there (`pick-hold-variant`,
+`holdVariant` noted and tagged, `hold` a Compare over `hold-spoken` and
+`hold-recorded`); `prompts.tf` with `prompts/salt-line-tips.wav` and `.txt`
+copied byte for byte; `hashicorp/awscc ~> 1.104` in the module, the three
+environments, `tests/` and the harness, configured in each environment with
+`region` only, and the five lock files re-locked for four platforms
+(`environments/dev` by `tofu providers lock`, the identical hashes copied
+into the other four, each confirmed by `tofu init -lockfile=readonly`);
+the plugin directory cached in every CI job; the tftest runs `callbacks`
+and `hold_ab`, a `mock_provider "awscc"` in both test files, and the
+prompt's bucket, object and tags in `prod`; the snapshot at `b8e5b3f` with
+`check.mjs` naming the prompt and the in-set alias, and planning a copy of
+the module in which the prompt is a `terraform_data` stand-in, because E1
+was answered no: awscc validates its credentials against STS as it
+configures (VERIFY.md, T10). A read-only plan of dev against the live Tier
+1 state showed 22 to add, 10 to change, 0 to destroy (VERIFY.md, T11).
+The apply comes with the Close.
 
 - **Module files**: new `hh-dead-line.flow.tf`, `hh-dead-whisper.flow.tf`,
   `hh-dead-hold.flow.tf`, `hh-dead-queue-experience.flow.tf`,
   `hh-customer-hold.flow.tf`, `hh-agent-hold.flow.tf`,
-  `hh-offer-callback.flow.tf`, and `hh-collect-address.flow.tf` once
-  flow-as-code C04 is released. Edits to `hh-hotline-main.flow.tf` (plane
-  check, prank screen, work order), `hh-district.tf` (the hold hooks, the
-  callback offer, refs), `hh-queue-experience.tf` (the A/B split, the inline
-  callback on `dispatch-overflow`, the `prompt:salt-line-tips` ref) and
+  `hh-offer-callback.flow.tf` with `hh-offer-callback-release.tf` (its
+  version and live alias; the reader takes one resource per `.flow.tf`),
+  and `hh-collect-address.flow.tf` once flow-as-code C04 is released. Edits
+  to `hh-hotline-main.flow.tf` (plane check, prank screen, work order),
+  `hh-district.tf` (the hold hooks, the callback offer, refs),
+  `hh-queue-experience.tf` (the A/B split, the inline callback on
+  `dispatch-overflow`, the `prompt:salt-line-tips` ref) and
   `hh-district-menu.tf` (the address Compare). New `prompts.tf`: a private
-  bucket, the committed audio as an object, and `awscc_connect_prompt`.
+  bucket (suffixed with the instance alias's random id, as the recording
+  bucket is; the module reads no caller identity, so the harness plans it
+  offline), the committed audio as an object keyed on its MD5, and
+  `awscc_connect_prompt`.
 - **Providers**: `versions.tf` gains `hashicorp/awscc`;
   `environments/*/providers.tf` configure it with `region` only. awscc has
   no `default_tags`, `skip_credentials_validation` or
@@ -77,27 +108,38 @@ E1 wait on the mirrors of PRs 6 and 7; the apply on the Close.
   OpenTofu version, then `tofu test` and the harness init again, each
   under a 20-minute timeout, so the mirror of T2 PR 7 caches the plugin
   directory in CI (`actions/cache` keyed on the lock files, pinned to a
-  commit SHA like every other action).
+  commit SHA like every other action, with `TF_PLUGIN_CACHE_DIR` pointing
+  every init at it).
 - **tftest runs**: a `mock_provider "awscc"` with a `prompt_arn` default;
   new runs `dead_line`, `holds`, `prank_screen`, `callbacks` and `hold_ab`.
   `environments.tftest.hcl` still shows the roots differ only in their
   `terraform.tfvars`.
 - **Equivalence**: a snapshot bump per mirrored PR; `REWRITES` in
   `check.mjs` learns `awscc_connect_prompt.X.prompt_arn` to `.name` and
-  `expectedBindings` the same address, and both learn the unaliased in-set
-  module form, `flowascode_contact_flow_module.X.arn` to `.name`, for
-  `module:hh-offer-callback` (bound without a version or alias, as the
-  TypeScript-first T2 records); today's rules cover only the greeting alias
-  and `flowascode_contact_flow.X.arn`.
+  `expectedBindings` the same address, and the in-set module's alias,
+  `flowascode_contact_flow_module_alias.hh_offer_callback_live.arn` to
+  `<module name>@live`, the greeting alias's form: that repository invokes
+  `module:hh-offer-callback@live` through a live alias after all (its
+  Deviations: the typed `Refs.module` takes an alias), and its address maps
+  carry no entry for an in-set key, so `check.mjs` expects
+  `hh-offer-callback@live` for it as it does `hh-greeting-<season>@live`.
+  Both plans run on a copy of the module with the prompt stood in for
+  (E1, below).
 - **Risk E1**, as rewritten 2026-10-05: with an awscc provider block
   carrying placeholder `access_key` and `secret_key`, `region` and
   `skip_metadata_api_check`, does `tofu plan` of a new
   `awscc_connect_prompt` make a Cloud Control call? The aws and flowascode
-  `skip_` configuration cannot be reused, since awscc has none of it. The
-  mirror of T2 PR 7 (the first awscc resource) answers E1 before it merges
-  and records it in `VERIFY.md` as `harness-checked`; the fallback is an
-  override in `harness/` that stands in for the awscc resources without
-  skipping the prompt's binding check.
+  `skip_` configuration cannot be reused, since awscc has none of it.
+  Answered by the mirror of PR 7 on 2026-10-05 (VERIFY.md, T10,
+  `harness-checked`): the provider does not get as far as Cloud Control; it
+  calls STS `GetCallerIdentity` as it configures and fails on the
+  placeholder keys (`InvalidClientTokenId`), so no plan with an awscc
+  resource runs offline. The fallback is in place: `check.mjs` plans a
+  copy of the module in which the prompt is a `terraform_data` stand-in
+  with the same attributes, its references rewritten (`STAND_IN`), so
+  awscc is never configured and the prompt's binding is still compared by
+  the name `prompts.tf` declares. The harness root keeps awscc declared
+  and configures it nowhere.
 - **Recording storage**: that repository found no CALL_RECORDINGS storage
   config on any instance (2026-10-05), so `recordings.tf` adds one per
   environment: an `amazon-connect-` prefixed bucket (the only S3 grant the
