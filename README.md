@@ -34,9 +34,14 @@ Connect instances, nothing shared.
 > Tier 2, PRs 1 to 7 of the TypeScript-first repository (the hold flows, the
 > Queue of the Dead, the prank screen, the closed hours and the recording
 > storage; then the work order, the callbacks and the recorded hold prompt
-> with its A/B split), is mirrored here as of 2026-10-05 and planned
-> read-only against dev: 22 to add, 10 to change, 0 to destroy. The apply comes with the tier's Close,
-> one per tier ([tasks/README.md](tasks/README.md)).
+> with its A/B split), is **live in dev, qa and prod** (2026-10-13), from
+> the mirror at snapshot `b8e5b3f`: a saved plan of each showed 22 to add,
+> 10 to change, 0 to destroy, each apply matched it, and a fresh plan of
+> each shows no changes. The TypeScript-first repository's scenarios S1 to
+> S5 passed against all three instances, no S4 run left a callback behind,
+> and the closed hours, the recording storage, the prompt and the hold
+> split were each accepted as authored ([VERIFY.md](VERIFY.md), T12;
+> [tasks/README.md](tasks/README.md)).
 
 ## The hotline
 

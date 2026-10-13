@@ -9,7 +9,7 @@ place so a change here can be checked against them.
 | #   | Task          | Criteria                                                                                                                  | Status                                           |
 | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | T1  | First night   | [T1-first-night.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T1-first-night.md)     | live in dev, qa and prod, us-west-2 (2026-09-30) |
-| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | PRs 1 to 7 mirrored 2026-10-05 (snapshot `b8e5b3f`); E1 answered (VERIFY.md, T10); planned on dev, not applied; the Close follows |
+| T2  | Full moon     | [T2-full-moon.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T2-full-moon.md)         | live in dev, qa and prod, us-west-2 (2026-10-13); S1 to S5 passed on all three (VERIFY.md, T12) |
 | T3  | Witching hour | [T3-witching-hour.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T3-witching-hour.md) | planned 2026-10-04; after the season             |
 | T4  | Full coverage | [T4-full-coverage.md](https://github.com/flow-as-code/hollow-hour-example-typescript/blob/main/tasks/T4-full-coverage.md) | planned 2026-10-04; follows flow-as-code Phase D |
 
@@ -78,7 +78,42 @@ the module in which the prompt is a `terraform_data` stand-in, because E1
 was answered no: awscc validates its credentials against STS as it
 configures (VERIFY.md, T10). A read-only plan of dev against the live Tier
 1 state showed 22 to add, 10 to change, 0 to destroy (VERIFY.md, T11).
-The apply comes with the Close.
+
+**Close (2026-10-13, UTC)**, from `main` at the merge of the mirror of
+PRs 5 to 7, snapshot `b8e5b3f`; the evidence is VERIFY.md, T12.
+
+- Checks, 15:48 to 15:51: fmt, validate of the five roots, `tofu test` (21
+  passed, 0 failed), equivalence in dev, qa, prod and prod-october (19
+  flows and modules, 312 actions).
+- `bootstrap`, planned 15:49: no changes. The recording storage is in the
+  module here, so it came with each environment's apply.
+- Saved plans: dev 15:51, qa 15:52, prod 15:52, each 22 to add, 10 to
+  change, 0 to destroy, and the three resource lists identical. Each
+  environment read no CALL_RECORDINGS storage config, and 10 concurrent
+  calls (L-12AB7C57), before its apply.
+- Applies of those plans, one at a time, by hand: dev 16:50 to 16:51, qa
+  16:51 to 16:52, prod 16:52 to 16:53, each "22 added, 10 changed, 0
+  destroyed". Fresh plans: dev 16:54, qa 17:04, prod 17:04, each "No
+  changes", which is the drift check here.
+- Reads, dev 16:54 and qa and prod 17:04: RS1, HC1, P1 and DP1 accepted
+  as authored on every instance, with no fallback taken.
+- Scenarios S1 to S5 from the TypeScript-first repository, one run at a
+  time, S4 first, each against a resource map built from that
+  environment's state (38 references):
+
+  | Environment | Started | S4      | S1     | S2      | S3     | S5     | Callbacks found after S4 |
+  | ----------- | ------- | ------- | ------ | ------- | ------ | ------ | ------------------------ |
+  | dev         | 16:55   | 121.5 s | 59.4 s | 100.6 s | 99.0 s | 46.7 s | 0, swept twice           |
+  | qa          | 17:05   | 121.8 s | 60.2 s | 98.5 s  | 98.6 s | 46.4 s | 0, swept twice           |
+  | prod        | 17:12   | 121.2 s | 59.3 s | 99.6 s  | 98.9 s | 46.5 s | 0, swept twice           |
+
+  Every run passed, with no "Too Many Requests". No `StopContact` was needed (CB1).
+  D1: dev's S4 contact holds the resolved advice as its Description, and
+  a search by "Hollow Hour work order" found S2's, S3's and S4's contacts
+  on each instance.
+- Not exercised: the apply ran from an operator's credentials, not
+  `deploy.yml`, so the deploy role (VERIFY.md, T4) and its `s3:GetObject`
+  on the prompts bucket (P1) are still to be seen.
 
 - **Module files**: new `hh-dead-line.flow.tf`, `hh-dead-whisper.flow.tf`,
   `hh-dead-hold.flow.tf`, `hh-dead-queue-experience.flow.tf`,
